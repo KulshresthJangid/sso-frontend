@@ -1,0 +1,108 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --color-bg: #0d0d15;
+    --color-surface: #13131b;
+    --color-surface-high: #1f1f27;
+    --color-border: rgba(255,255,255,0.08);
+    --color-primary: #6366f1;
+    --color-primary-dim: #4f46e5;
+    --color-text: #e4e1ed;
+    --color-muted: #908fa0;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body, #root {
+    height: 100%;
+    background: var(--color-bg);
+    color: var(--color-text);
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Grain texture overlay */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 9999;
+    opacity: 0.4;
+  }
+}
+
+/* Glassmorphism card utility */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(40px);
+  -webkit-backdrop-filter: blur(40px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.03) inset,
+    0 32px 64px rgba(0,0,0,0.4);
+}
+
+/* Indigo glow utility */
+.glow-indigo {
+  box-shadow: 0 0 80px -20px rgba(99, 102, 241, 0.5);
+}
+
+/* Pill input */
+.input-pill {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 9999px;
+  padding: 0.75rem 1.25rem;
+  color: #e4e1ed;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.input-pill::placeholder { color: #908fa0; }
+.input-pill:focus {
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99,102,241,0.2);
+}
+
+/* Indigo primary button */
+.btn-primary {
+  width: 100%;
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: white;
+  font-weight: 600;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s, opacity 0.15s;
+  box-shadow: 0 0 24px -4px rgba(99,102,241,0.6);
+}
+.btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 32px -4px rgba(99,102,241,0.8); }
+.btn-primary:active { transform: translateY(0); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+/* Glass secondary button */
+.btn-glass {
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  color: #e4e1ed;
+  font-weight: 500;
+  padding: 0.7rem 1.25rem;
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+}
+.btn-glass:hover { background: rgba(255,255,255,0.09); border-color: rgba(255,255,255,0.2); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+
+
