@@ -1,6 +1,12 @@
 import axios from 'axios'
 
-const api = axios.create({ baseURL: '' })
+const api = axios.create({ baseURL: import.meta.env.VITE_SSO_API_URL ?? '', withCredentials: true })
+
+// ── Signup (public — creates org + admin atomically) ─────────────────────────
+export const signupApi = {
+  signup: (data: { orgName: string; slug: string; adminEmail: string; adminPassword: string }) =>
+    api.post('/api/signup', data).then(r => r.data),
+}
 
 // ── Org Management ────────────────────────────────────────────────────────────
 export const orgsApi = {

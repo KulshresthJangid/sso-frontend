@@ -7,10 +7,9 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8080',
-      // Proxy tenant-scoped oauth2 paths
-      '^/[^/]+/oauth2': 'http://localhost:8080',
-      '^/[^/]+/login': 'http://localhost:8080',
+      '/api': { target: 'http://localhost:9000', changeOrigin: true, xfwd: true, autoRewrite: true },
+      '^/[^/]+/oauth2': { target: 'http://localhost:9000', changeOrigin: true, xfwd: true, autoRewrite: true },
+      '^/[^/]+/login': { target: 'http://localhost:9000', changeOrigin: true, xfwd: true, autoRewrite: true },
     }
   }
 })
