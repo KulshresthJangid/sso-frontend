@@ -1,7 +1,7 @@
 import { motion } from 'framer-motion'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { CheckCircle, XCircle, Loader2, ArrowLeft, Home } from 'lucide-react'
+import { CheckCircle, XCircle, ArrowLeft, Home } from 'lucide-react'
 import { useOrgStore } from '../store/orgStore'
 
 // Maps backend error codes → human-readable messages
@@ -55,30 +55,20 @@ export default function CallbackPage() {
   }, [state])
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[400px] h-[400px] rounded-full opacity-20"
-          style={{
-            background: state === 'error'
-              ? 'radial-gradient(circle, #ff4444 0%, transparent 70%)'
-              : 'radial-gradient(circle, #6366f1 0%, transparent 70%)',
-            filter: 'blur(80px)',
-            transition: 'background 0.8s'
-          }} />
-      </div>
-
+    <div className="min-h-screen flex items-center justify-center" style={{ background: '#ffffff' }}>
       <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
         transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-        className="glass relative z-10 w-full max-w-md mx-6 rounded-2xl p-10 text-center"
-        style={{ boxShadow: state === 'error' ? '0 0 80px -20px rgba(255,68,68,0.4)' : '0 0 80px -20px rgba(99,102,241,0.5)' }}>
+        className="card w-full max-w-md mx-6 p-10 text-center"
+        style={{ background: '#ffffff' }}>
 
         {state === 'loading' && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            {/* Black spinner */}
             <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
               className="w-16 h-16 rounded-full border-4 border-transparent mx-auto mb-6"
-              style={{ borderTopColor: '#6366f1', borderRightColor: 'rgba(99,102,241,0.3)' }} />
-            <h2 className="text-xl font-semibold mb-2">Authenticating...</h2>
-            <p className="text-sm" style={{ color: '#908fa0' }}>Verifying your credentials securely</p>
+              style={{ borderTopColor: '#0a0a0a', borderRightColor: '#e5e5e5' }} />
+            <h2 className="text-xl font-semibold mb-2" style={{ color: '#0a0a0a' }}>Authenticating...</h2>
+            <p className="text-sm" style={{ color: '#6b6b6b' }}>Verifying your credentials securely</p>
           </motion.div>
         )}
 
@@ -87,22 +77,24 @@ export default function CallbackPage() {
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 260, damping: 20 }}
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-              style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', boxShadow: '0 0 32px rgba(34,197,94,0.5)' }}>
+              style={{ background: '#16a34a' }}>
               <CheckCircle size={32} color="white" />
             </motion.div>
-            <h2 className="text-2xl font-bold mb-1">You're in!</h2>
-            <p className="text-sm mb-4" style={{ color: '#908fa0' }}>Welcome back, <strong style={{ color: '#e4e1ed' }}>{userEmail || 'user'}</strong></p>
+            <h2 className="text-2xl font-bold mb-1" style={{ color: '#0a0a0a' }}>You're in!</h2>
+            <p className="text-sm mb-4" style={{ color: '#6b6b6b' }}>
+              Welcome back, <strong style={{ color: '#0a0a0a' }}>{userEmail || 'user'}</strong>
+            </p>
 
             {slug && (
-              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-medium mb-6"
-                style={{ background: 'rgba(99,102,241,0.15)', color: '#c0c1ff', border: '1px solid rgba(99,102,241,0.3)' }}>
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded text-xs font-medium mb-6"
+                style={{ background: '#f5f5f5', color: '#0a0a0a', border: '1px solid #e5e5e5' }}>
                 {orgName || slug}
               </span>
             )}
 
-            <p className="text-sm mb-3" style={{ color: '#908fa0' }}>Redirecting to dashboard in {countdown}s...</p>
-            <div className="h-1 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.1)' }}>
-              <motion.div className="h-full rounded-full" style={{ background: '#6366f1' }}
+            <p className="text-sm mb-3" style={{ color: '#6b6b6b' }}>Redirecting to dashboard in {countdown}s...</p>
+            <div className="h-1 rounded-full overflow-hidden" style={{ background: '#f0f0f0' }}>
+              <motion.div className="h-full rounded-full" style={{ background: '#0a0a0a' }}
                 initial={{ width: '100%' }} animate={{ width: '0%' }}
                 transition={{ duration: 3, ease: 'linear' }} />
             </div>
@@ -114,22 +106,22 @@ export default function CallbackPage() {
             <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
               transition={{ type: 'spring', stiffness: 260, damping: 20 }}
               className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-6"
-              style={{ background: 'rgba(255,68,68,0.15)', border: '1px solid rgba(255,68,68,0.3)' }}>
-              <XCircle size={32} style={{ color: '#ff6b6b' }} />
+              style={{ background: '#dc2626' }}>
+              <XCircle size={32} color="white" />
             </motion.div>
-            <h2 className="text-2xl font-bold mb-2">Access Denied</h2>
-            <p className="text-sm mb-6 max-w-xs mx-auto" style={{ color: '#908fa0' }}>{errorMsg}</p>
+            <h2 className="text-2xl font-bold mb-2" style={{ color: '#0a0a0a' }}>Access Denied</h2>
+            <p className="text-sm mb-6 max-w-xs mx-auto" style={{ color: '#6b6b6b' }}>{errorMsg}</p>
             {error && (
-              <p className="text-xs mb-6 font-mono px-3 py-1.5 rounded-lg inline-block"
-                style={{ background: 'rgba(255,255,255,0.05)', color: '#908fa0' }}>
+              <p className="text-xs mb-6 font-mono px-3 py-1.5 rounded inline-block"
+                style={{ background: '#f5f5f5', color: '#6b6b6b', border: '1px solid #e5e5e5' }}>
                 error: {error}
               </p>
             )}
             <div className="flex gap-3">
-              <button onClick={() => navigate('/login')} className="btn-primary flex items-center gap-2 flex-1">
+              <button onClick={() => navigate('/login')} className="btn-primary flex items-center justify-center gap-2 flex-1">
                 <ArrowLeft size={14} /> Try another org
               </button>
-              <button onClick={() => navigate('/')} className="btn-glass flex items-center gap-2 flex-1">
+              <button onClick={() => navigate('/')} className="btn-ghost flex items-center justify-center gap-2 flex-1">
                 <Home size={14} /> Home
               </button>
             </div>

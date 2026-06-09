@@ -1,138 +1,368 @@
-import { motion } from 'framer-motion'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Building2, ArrowRight, Loader2, Check } from 'lucide-react'
-import { orgsApi, usersApi } from '../lib/api'
+import { useNavigate, Link } from 'react-router-dom'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
+import { ArrowRight, Loader2, AlertCircle, Check, Sparkles } from 'lucide-react'
+import { orgsApi, signupApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
+
+function slugify(v: string) {
+  return v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+const slide: Variants = {
+  hidden: { opacity: 0, x: 16 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.22 } },
+  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
+}
 
 export default function SignupPage() {
   const navigate = useNavigate()
   const { setOrg } = useOrgStore()
-  const [step, setStep] = useState<'org' | 'user' | 'done'>('org')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
 
+  const [step, setStep] = useState<1 | 2 | 3>(1)
   const [orgName, setOrgName] = useState('')
   const [orgSlug, setOrgSlug] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState('')
 
-  function slugify(v: string) {
-    return v.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
-  }
-
-  async function handleOrgCreate(e: React.FormEvent) {
+  async function handleOrgStep(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setError('')
+    setLoading(true)
+    setError('')
     try {
-      await orgsApi.create({ name: orgName, slug: orgSlug })
-      setOrg(orgSlug, orgName)
-      setStep('user')
+      await orgsApi.get(orgSlug)
+      setError('This slug is already taken. Please choose another.')
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Slug may already be taken.')
-    } finally { setLoading(false) }
+      if (err?.response?.status === 404) {
+        setStep(2)
+      } else {
+        setError('Something went wrong. Please try again.')
+      }
+    } finally {
+      setLoading(false)
+    }
   }
 
-  async function handleUserCreate(e: React.FormEvent) {
+  async function handleSignup(e: React.FormEvent) {
     e.preventDefault()
-    setLoading(true); setError('')
+    setLoading(true)
+    setError('')
     try {
-      await usersApi.create(orgSlug, { email, password, orgRole: 'ORG_ADMIN' })
-      setStep('done')
+      await signupApi.signup({ orgName, slug: orgSlug, adminEmail: email, adminPassword: password })
+      setStep(3)
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Could not create user.')
-    } finally { setLoading(false) }
+      setError(err?.response?.data?.message || 'Could not create account. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const steps = ['Create org', 'Admin user', 'Done']
+  function handleGoToDashboard() {
+    setOrg(orgSlug, orgName)
+    navigate('/dashboard')
+  }
+
+  const steps = ['Organization', 'Admin account', 'Done']
+  const stepIdx = step - 1
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[500px] h-[500px] rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)', filter: 'blur(80px)' }} />
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      background: '#ffffff',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '2rem 1.5rem',
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+      <div style={{ width: '100%', maxWidth: 420 }}>
+        {/* Logo */}
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0.625rem',
+          marginBottom: '2rem', justifyContent: 'center',
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: '0.5rem',
+            background: '#6366f1', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: '0.9rem',
+          }}>V</div>
+          <span style={{ color: '#18181b', fontWeight: 600, fontSize: '0.9375rem' }}>Vault SSO</span>
+        </div>
 
-      <motion.div initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-        className="glass glow-indigo relative z-10 w-full max-w-md mx-6 rounded-2xl p-8">
-
-        {/* Steps */}
-        <div className="flex items-center justify-center gap-2 mb-8">
+        {/* Step indicator */}
+        <div style={{
+          display: 'flex', alignItems: 'center',
+          justifyContent: 'center', gap: '0', marginBottom: '2rem',
+        }}>
           {steps.map((s, i) => (
-            <div key={s} className="flex items-center gap-2">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                i < steps.indexOf(step === 'done' ? 'Done' : step === 'user' ? 'Admin user' : 'Create org')
-                  ? 'bg-indigo-500 text-white' : i === 0 && step === 'org' ? 'bg-indigo-500 text-white' : i === 1 && step === 'user' ? 'bg-indigo-500 text-white' : i === 2 && step === 'done' ? 'bg-green-500 text-white' : 'bg-white/10 text-white/40'
-              }`}>
-                {(step === 'done' && i < 2) || (step === 'user' && i === 0) ? <Check size={12} /> : i + 1}
+            <div key={s} style={{ display: 'flex', alignItems: 'center' }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.375rem' }}>
+                <div style={{
+                  width: 28, height: 28, borderRadius: '50%',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: '0.75rem', fontWeight: 600,
+                  background: i < stepIdx ? '#6366f1' : i === stepIdx ? '#6366f1' : '#f4f4f5',
+                  color: i <= stepIdx ? '#fff' : '#a1a1aa',
+                  border: i === stepIdx ? '2px solid #6366f1' : '2px solid transparent',
+                  transition: 'all 0.2s',
+                }}>
+                  {i < stepIdx ? <Check size={12} /> : i + 1}
+                </div>
+                <span style={{
+                  fontSize: '0.7rem', fontWeight: 500,
+                  color: i === stepIdx ? '#18181b' : '#a1a1aa',
+                  whiteSpace: 'nowrap',
+                }}>{s}</span>
               </div>
-              {i < steps.length - 1 && <div className="w-8 h-px bg-white/10" />}
+              {i < steps.length - 1 && (
+                <div style={{
+                  width: 48, height: 2, margin: '0 4px',
+                  marginBottom: 20,
+                  background: i < stepIdx ? '#6366f1' : '#e4e4e7',
+                  transition: 'background 0.3s',
+                }} />
+              )}
             </div>
           ))}
         </div>
 
-        {step === 'org' && (
-          <motion.div key="org" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <div className="flex items-center gap-2 mb-1">
-              <Building2 size={18} style={{ color: '#6366f1' }} />
-              <h2 className="text-xl font-semibold">Create your organization</h2>
-            </div>
-            <p className="text-sm mb-6" style={{ color: '#908fa0' }}>Your team's home on Vault SSO</p>
+        {/* Card */}
+        <div style={{
+          background: '#fff', border: '1px solid #e4e4e7',
+          borderRadius: '0.875rem', padding: '2rem',
+          boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+        }}>
+          <AnimatePresence mode="wait">
+            {step === 1 && (
+              <motion.div key="step1" variants={slide} initial="hidden" animate="visible" exit="exit">
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#18181b', marginBottom: '0.375rem' }}>
+                  Create your organization
+                </h2>
+                <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                  Your team's home on Vault SSO.
+                </p>
 
-            <form onSubmit={handleOrgCreate} className="flex flex-col gap-4">
-              <input className="input-pill" placeholder="Organization name" value={orgName}
-                onChange={e => { setOrgName(e.target.value); setOrgSlug(slugify(e.target.value)) }} autoFocus />
-              <div className="relative">
-                <input className="input-pill pr-24" placeholder="org-slug" value={orgSlug}
-                  onChange={e => setOrgSlug(slugify(e.target.value))} />
-                <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs" style={{ color: '#908fa0' }}>
-                  .yoursso.com
-                </span>
-              </div>
-              {error && <p className="text-sm px-2" style={{ color: '#ffb4ab' }}>{error}</p>}
-              <button className="btn-primary flex items-center justify-center gap-2" disabled={loading}>
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <>Next <ArrowRight size={16} /></>}
-              </button>
-            </form>
-            <p className="mt-4 text-center text-sm" style={{ color: '#908fa0' }}>
-              Already have an org?{' '}
-              <button onClick={() => navigate('/login')} className="font-medium" style={{ color: '#c0c1ff' }}>Sign in →</button>
-            </p>
-          </motion.div>
-        )}
+                <form onSubmit={handleOrgStep} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Organization name</label>
+                    <input
+                      className="input-light"
+                      type="text"
+                      placeholder="Acme Corp"
+                      value={orgName}
+                      onChange={e => {
+                        setOrgName(e.target.value)
+                        setOrgSlug(slugify(e.target.value))
+                        setError('')
+                      }}
+                      autoFocus
+                      required
+                    />
+                  </div>
 
-        {step === 'user' && (
-          <motion.div key="user" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-            <h2 className="text-xl font-semibold mb-1">Create admin account</h2>
-            <p className="text-sm mb-6" style={{ color: '#908fa0' }}>You'll be the first admin of <strong style={{ color: '#c0c1ff' }}>{orgSlug}</strong></p>
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Workspace slug</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        className="input-light"
+                        type="text"
+                        placeholder="acme-corp"
+                        value={orgSlug}
+                        onChange={e => { setOrgSlug(slugify(e.target.value)); setError('') }}
+                        required
+                        style={{ paddingRight: '6.5rem' }}
+                      />
+                      <span style={{
+                        position: 'absolute', right: '0.75rem', top: '50%',
+                        transform: 'translateY(-50%)', fontSize: '0.75rem', color: '#a1a1aa',
+                        pointerEvents: 'none',
+                      }}>.vault-sso.com</span>
+                    </div>
+                  </div>
 
-            <form onSubmit={handleUserCreate} className="flex flex-col gap-4">
-              <input className="input-pill" type="email" placeholder="Admin email" value={email} onChange={e => setEmail(e.target.value)} autoFocus />
-              <input className="input-pill" type="password" placeholder="Password (8+ chars)" value={password} onChange={e => setPassword(e.target.value)} />
-              {error && <p className="text-sm px-2" style={{ color: '#ffb4ab' }}>{error}</p>}
-              <button className="btn-primary flex items-center justify-center gap-2" disabled={loading}>
-                {loading ? <Loader2 size={16} className="animate-spin" /> : <>Create account <ArrowRight size={16} /></>}
-              </button>
-            </form>
-          </motion.div>
-        )}
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.625rem 0.875rem',
+                          background: '#fef2f2', border: '1px solid #fecaca',
+                          borderRadius: '0.5rem', color: '#dc2626', fontSize: '0.8125rem',
+                        }}>
+                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                        {error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
-        {step === 'done' && (
-          <motion.div key="done" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
-            className="text-center py-4">
-            <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}
-              transition={{ type: 'spring', stiffness: 300, damping: 20, delay: 0.1 }}
-              className="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4"
-              style={{ background: 'linear-gradient(135deg, #22c55e, #16a34a)', boxShadow: '0 0 32px rgba(34,197,94,0.4)' }}>
-              <Check size={28} color="white" />
-            </motion.div>
-            <h2 className="text-2xl font-semibold mb-2">You're all set!</h2>
-            <p className="text-sm mb-6" style={{ color: '#908fa0' }}>Your organization <strong style={{ color: '#c0c1ff' }}>{orgSlug}</strong> is ready.</p>
-            <button onClick={() => navigate('/dashboard')} className="btn-primary">Go to Dashboard →</button>
-          </motion.div>
-        )}
-      </motion.div>
+                  <button
+                    className="btn-primary-light"
+                    type="submit"
+                    disabled={loading || !orgName.trim() || !orgSlug.trim()}
+                    style={{ width: '100%', padding: '0.7rem 1.25rem', justifyContent: 'center' }}
+                  >
+                    {loading
+                      ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                      : <><span>Continue</span> <ArrowRight size={15} /></>}
+                  </button>
+                </form>
+
+                <p style={{ marginTop: '1.25rem', textAlign: 'center', fontSize: '0.8125rem', color: '#71717a' }}>
+                  Already have an account?{' '}
+                  <Link to="/login" style={{ color: '#6366f1', fontWeight: 500, textDecoration: 'none' }}>Sign in</Link>
+                </p>
+              </motion.div>
+            )}
+
+            {step === 2 && (
+              <motion.div key="step2" variants={slide} initial="hidden" animate="visible" exit="exit">
+                {/* Org badge */}
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.3rem 0.75rem',
+                  background: '#f4f4f5', borderRadius: '9999px',
+                  marginBottom: '1.25rem', fontSize: '0.8rem', color: '#3f3f46', fontWeight: 500,
+                }}>
+                  <span style={{ color: '#22c55e', fontSize: '0.6rem' }}>●</span>
+                  {orgSlug}
+                </div>
+
+                <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#18181b', marginBottom: '0.375rem' }}>
+                  Create admin account
+                </h2>
+                <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1.5rem' }}>
+                  You'll be the first admin of <strong style={{ color: '#18181b' }}>{orgName}</strong>.
+                </p>
+
+                <form onSubmit={handleSignup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Admin email</label>
+                    <input
+                      className="input-light"
+                      type="email"
+                      placeholder="admin@company.com"
+                      value={email}
+                      onChange={e => { setEmail(e.target.value); setError('') }}
+                      autoFocus
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Password</label>
+                    <input
+                      className="input-light"
+                      type="password"
+                      placeholder="8+ characters"
+                      value={password}
+                      onChange={e => { setPassword(e.target.value); setError('') }}
+                      required
+                    />
+                  </div>
+
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.625rem 0.875rem',
+                          background: '#fef2f2', border: '1px solid #fecaca',
+                          borderRadius: '0.5rem', color: '#dc2626', fontSize: '0.8125rem',
+                        }}>
+                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                        {error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <div style={{ display: 'flex', gap: '0.75rem' }}>
+                    <button
+                      type="button"
+                      onClick={() => { setStep(1); setError('') }}
+                      style={{
+                        flex: '0 0 auto', padding: '0.7rem 1rem',
+                        background: '#f4f4f5', border: '1px solid #e4e4e7',
+                        borderRadius: '0.5rem', cursor: 'pointer',
+                        fontSize: '0.875rem', fontWeight: 500, color: '#52525b',
+                        fontFamily: 'inherit',
+                      }}
+                    >Back</button>
+                    <button
+                      className="btn-primary-light"
+                      type="submit"
+                      disabled={loading || !email || !password}
+                      style={{ flex: 1, padding: '0.7rem 1.25rem', justifyContent: 'center' }}
+                    >
+                      {loading
+                        ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        : <><span>Create account</span> <ArrowRight size={15} /></>}
+                    </button>
+                  </div>
+                </form>
+              </motion.div>
+            )}
+
+            {step === 3 && (
+              <motion.div
+                key="step3"
+                initial={{ opacity: 0, scale: 0.96 }}
+                animate={{ opacity: 1, scale: 1 }}
+                style={{ textAlign: 'center', padding: '1rem 0' }}
+              >
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  transition={{ type: 'spring', stiffness: 260, damping: 18, delay: 0.1 }}
+                  style={{
+                    width: 64, height: 64, borderRadius: '50%',
+                    background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    margin: '0 auto 1.25rem',
+                    boxShadow: '0 8px 24px rgba(99,102,241,0.3)',
+                  }}
+                >
+                  <Sparkles size={26} color="#fff" />
+                </motion.div>
+                <h2 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#18181b', marginBottom: '0.5rem' }}>
+                  You're all set!
+                </h2>
+                <p style={{ color: '#71717a', fontSize: '0.875rem', marginBottom: '1.75rem', lineHeight: 1.6 }}>
+                  Your organization{' '}
+                  <strong style={{ color: '#18181b' }}>{orgName}</strong> is ready.
+                  Head to the dashboard to register your first app.
+                </p>
+                <button
+                  onClick={handleGoToDashboard}
+                  className="btn-primary-light"
+                  style={{ width: '100%', padding: '0.7rem 1.25rem', justifyContent: 'center' }}
+                >
+                  Go to Dashboard <ArrowRight size={15} />
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+      </div>
     </div>
   )
 }

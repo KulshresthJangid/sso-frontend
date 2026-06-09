@@ -1,10 +1,42 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Loader2, X, UserCircle2 } from 'lucide-react'
+import { Plus, Trash2, Loader2, X, Users } from 'lucide-react'
 import { usersApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
-interface User { id: string; email: string; orgRole: string; active: boolean }
+interface User {
+  id: string
+  email: string
+  orgRole: string
+  active: boolean
+}
+
+const MODAL_BG: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.18 } },
+  exit: { opacity: 0, transition: { duration: 0.15 } },
+}
+const MODAL_CARD: Variants = {
+  hidden: { opacity: 0, scale: 0.96, y: 16 },
+  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.25 } },
+  exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.15 } },
+}
+
+function Avatar({ email }: { email: string }) {
+  const colors = ['#6366f1', '#22c55e', '#f59e0b', '#ef4444', '#3b82f6', '#a855f7']
+  const idx = email.charCodeAt(0) % colors.length
+  return (
+    <div style={{
+      width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+      background: colors[idx] + '20',
+      border: `1px solid ${colors[idx]}40`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontSize: '0.75rem', fontWeight: 600, color: colors[idx],
+    }}>
+      {email[0].toUpperCase()}
+    </div>
+  )
+}
 
 export default function UsersPage() {
   const { slug } = useOrgStore()
@@ -19,19 +51,29 @@ export default function UsersPage() {
 
   async function load() {
     setLoading(true)
-    try { setUsers(await usersApi.list(slug!)) } finally { setLoading(false) }
+    try {
+      const data = await usersApi.list(slug!)
+      if (!Array.isArray(data)) return
+      setUsers(data)
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleCreate(e: React.FormEvent) {
-    e.preventDefault(); setError(''); setSubmitting(true)
+    e.preventDefault()
+    setError('')
+    setSubmitting(true)
     try {
       await usersApi.create(slug!, form)
       setShowModal(false)
       setForm({ email: '', password: '', orgRole: 'ORG_MEMBER' })
       await load()
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Failed to create user')
-    } finally { setSubmitting(false) }
+      setError(err?.response?.data?.message || 'Failed to create user.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleDeactivate(id: string) {
@@ -39,121 +81,220 @@ export default function UsersPage() {
     setUsers(prev => prev.map(u => u.id === id ? { ...u, active: false } : u))
   }
 
-  const roleColors: Record<string, string> = {
-    ORG_ADMIN: '#6366f1', ORG_MEMBER: '#22c55e'
-  }
+  const activeCount = users.filter(u => u.active).length
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div style={{ padding: '1.75rem' }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start',
+        justifyContent: 'space-between', marginBottom: '1.5rem',
+      }}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-          <p className="text-sm mt-1" style={{ color: '#908fa0' }}>{users.filter(u => u.active).length} active members in <span style={{ color: '#c0c1ff' }}>{slug}</span></p>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-1)', marginBottom: '0.25rem' }}>
+            Users
+          </h1>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)' }}>
+            {activeCount} active member{activeCount !== 1 ? 's' : ''} in{' '}
+            <code style={{ color: 'var(--text-1)', fontFamily: 'monospace', fontSize: '0.75rem' }}>{slug}</code>
+          </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary w-auto px-5 flex items-center gap-2">
-          <Plus size={15} /> Invite User
+        <button
+          className="btn-primary"
+          onClick={() => setShowModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+        >
+          <Plus size={14} /> Invite User
         </button>
       </div>
 
-      <div className="glass rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+      {/* Table card */}
+      <div className="card" style={{ overflow: 'hidden', background: 'var(--surface)' }}>
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin" style={{ color: '#6366f1' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}>
+            <Loader2 size={20} style={{ color: 'var(--text-3)', animation: 'spin 1s linear infinite' }} />
           </div>
         ) : users.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-4xl mb-3">👥</p>
-            <p className="font-medium mb-1">No users yet</p>
-            <p className="text-sm mb-4" style={{ color: '#908fa0' }}>Invite the first member of your organization</p>
-            <button onClick={() => setShowModal(true)} className="btn-primary w-auto px-5 flex items-center gap-2 mx-auto">
-              <Plus size={15} /> Invite User
+          <div className="empty-state">
+            <Users size={32} />
+            <p style={{ fontWeight: 500, color: 'var(--text-2)', fontSize: '0.9rem' }}>No users yet</p>
+            <p style={{ fontSize: '0.8125rem' }}>Invite the first member of your organization.</p>
+            <button
+              className="btn-secondary"
+              onClick={() => setShowModal(true)}
+              style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+            >
+              <Plus size={14} /> Invite User
             </button>
           </div>
         ) : (
-          <div className="divide-y" style={{ borderColor: 'rgba(255,255,255,0.04)' }}>
-            {users.map((u, i) => (
-              <motion.div key={u.id} initial={{ opacity: 0, x: -8 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.04 }}
-                className="flex items-center gap-4 px-5 py-4 group transition-colors"
-                style={{ opacity: u.active ? 1 : 0.45 }}
-                onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.02)')}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                <div className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0"
-                  style={{ background: 'linear-gradient(135deg, rgba(99,102,241,0.3), rgba(129,140,248,0.15))', color: '#c0c1ff' }}>
-                  {u.email[0].toUpperCase()}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{u.email}</p>
-                  {!u.active && <p className="text-xs" style={{ color: '#908fa0' }}>Deactivated</p>}
-                </div>
-                <span className="text-xs px-2.5 py-1 rounded-full font-medium flex-shrink-0"
-                  style={{
-                    background: `${roleColors[u.orgRole] || '#908fa0'}20`,
-                    color: roleColors[u.orgRole] || '#908fa0'
-                  }}>
-                  {u.orgRole.replace('ORG_', '')}
-                </span>
-                {u.active && (
-                  <button onClick={() => handleDeactivate(u.id)}
-                    className="opacity-0 group-hover:opacity-100 p-2 rounded-xl transition-all hover:bg-red-500/15"
-                    style={{ color: '#908fa0' }}>
-                    <Trash2 size={14} />
-                  </button>
-                )}
-              </motion.div>
-            ))}
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Role</th>
+                  <th>Status</th>
+                  <th style={{ width: 52 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {users.map((u, i) => (
+                  <motion.tr
+                    key={u.id}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                    style={{ opacity: u.active ? 1 : 0.5 }}
+                  >
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <Avatar email={u.email} />
+                        <div>
+                          <p style={{ fontSize: '0.875rem', fontWeight: 500, color: 'var(--text-1)' }}>
+                            {u.email}
+                          </p>
+                          {!u.active && (
+                            <p style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>Deactivated</p>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td>
+                      <span className={`badge ${u.orgRole === 'ORG_ADMIN' ? 'badge-indigo' : 'badge-gray'}`}>
+                        {u.orgRole === 'ORG_ADMIN' ? 'Admin' : 'Member'}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${u.active ? 'badge-green' : 'badge-red'}`}>
+                        {u.active ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td>
+                      {u.active && u.orgRole !== 'ORG_ADMIN' && (
+                        <button
+                          className="btn-danger"
+                          onClick={() => handleDeactivate(u.id)}
+                          title="Deactivate user"
+                          style={{ padding: '0.375rem' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      )}
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
 
-      {/* Modal */}
+      {/* Invite modal */}
       <AnimatePresence>
         {showModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
-            onClick={() => setShowModal(false)}>
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ ease: [0.22, 1, 0.36, 1] }}
-              className="glass glow-indigo rounded-2xl p-6 w-full max-w-sm"
-              onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-5">
-                <div className="flex items-center gap-2">
-                  <UserCircle2 size={18} style={{ color: '#6366f1' }} />
-                  <h3 className="text-lg font-semibold">Invite User</h3>
-                </div>
-                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-white/10" style={{ color: '#908fa0' }}>
+          <motion.div
+            className="modal-overlay"
+            variants={MODAL_BG}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => setShowModal(false)}
+          >
+            <motion.div
+              variants={MODAL_CARD}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={e => e.stopPropagation()}
+              className="card"
+              style={{
+                width: '100%', maxWidth: 420,
+                padding: '1.5rem',
+                background: 'var(--surface)',
+                border: '1px solid var(--border-2)',
+              }}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', marginBottom: '1.25rem',
+              }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-1)' }}>Invite User</h3>
+                <button className="btn-ghost" onClick={() => { setShowModal(false); setError('') }} style={{ padding: '0.25rem' }}>
                   <X size={16} />
                 </button>
               </div>
 
-              <form onSubmit={handleCreate} className="flex flex-col gap-4">
-                <input className="input-pill" type="email" placeholder="Email address" value={form.email}
-                  onChange={e => setForm(f => ({ ...f, email: e.target.value }))} required autoFocus />
-                <input className="input-pill" type="password" placeholder="Temporary password" value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))} required />
+              <form onSubmit={handleCreate} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div>
+                  <p className="section-label">Email address</p>
+                  <input
+                    className="input"
+                    type="email"
+                    placeholder="colleague@company.com"
+                    value={form.email}
+                    onChange={e => setForm(f => ({ ...f, email: e.target.value }))}
+                    autoFocus
+                    required
+                  />
+                </div>
 
                 <div>
-                  <label className="text-xs font-medium uppercase tracking-wider mb-2 block" style={{ color: '#908fa0' }}>Role</label>
-                  <div className="flex gap-2">
-                    {['ORG_MEMBER', 'ORG_ADMIN'].map(r => (
-                      <button type="button" key={r} onClick={() => setForm(f => ({ ...f, orgRole: r }))}
-                        className="flex-1 py-2 rounded-full text-xs font-medium transition-all"
+                  <p className="section-label">Temporary password</p>
+                  <input
+                    className="input"
+                    type="password"
+                    placeholder="••••••••"
+                    value={form.password}
+                    onChange={e => setForm(f => ({ ...f, password: e.target.value }))}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <p className="section-label">Role</p>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {(['ORG_MEMBER', 'ORG_ADMIN'] as const).map(r => (
+                      <button
+                        type="button"
+                        key={r}
+                        onClick={() => setForm(f => ({ ...f, orgRole: r }))}
                         style={{
-                          background: form.orgRole === r ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)',
-                          color: form.orgRole === r ? '#c0c1ff' : '#908fa0',
-                          border: form.orgRole === r ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)'
-                        }}>{r.replace('ORG_', '')}</button>
+                          flex: 1, padding: '0.5rem 0.75rem',
+                          borderRadius: '0.5rem', cursor: 'pointer',
+                          fontFamily: 'inherit', fontSize: '0.8125rem', fontWeight: 500,
+                          transition: 'all 0.15s',
+                          background: form.orgRole === r ? 'var(--accent)' : 'var(--surface-2)',
+                          color: form.orgRole === r ? '#fff' : 'var(--text-2)',
+                          border: form.orgRole === r ? '1px solid var(--accent)' : '1px solid var(--border)',
+                        }}
+                      >
+                        {r === 'ORG_ADMIN' ? 'Admin' : 'Member'}
+                      </button>
                     ))}
                   </div>
                 </div>
 
-                {error && <p className="text-sm px-2" style={{ color: '#ffb4ab' }}>{error}</p>}
+                {error && (
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--error)' }}>{error}</p>
+                )}
 
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowModal(false)} className="btn-glass flex-1">Cancel</button>
-                  <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2" disabled={submitting}>
-                    {submitting ? <Loader2 size={15} className="animate-spin" /> : 'Invite'}
+                <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.25rem' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => { setShowModal(false); setError('') }}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >Cancel</button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={submitting || !form.email || !form.password}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >
+                    {submitting
+                      ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      : 'Send Invite'}
                   </button>
                 </div>
               </form>

@@ -1,200 +1,367 @@
-import { motion, AnimatePresence } from 'framer-motion'
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Building2, ArrowRight, Eye, EyeOff, GitFork, Globe, Loader2 } from 'lucide-react'
+import { useNavigate, Link } from 'react-router-dom'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
+import { ArrowRight, ShieldCheck, Loader2, AlertCircle, Building2, Eye, EyeOff } from 'lucide-react'
 import { orgsApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
+const slide: Variants = {
+  hidden: { opacity: 0, x: 16 },
+  visible: { opacity: 1, x: 0, transition: { duration: 0.22 } },
+  exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
+}
+
 export default function LoginPage() {
   const navigate = useNavigate()
-  const { setOrg } = useOrgStore()
+  const { setOrg, setUser } = useOrgStore()
 
-  const [step, setStep] = useState<'org' | 'creds'>('org')
-  const [slug, setSlug] = useState('')
+  const [step, setStep] = useState<1 | 2>(1)
+  const [orgInput, setOrgInput] = useState('')
+  const [orgName, setOrgName] = useState('')
+  const [orgSlug, setOrgSlug] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleOrgSubmit(e: React.FormEvent) {
+  async function handleOrgLookup(e: React.FormEvent) {
     e.preventDefault()
-    if (!slug.trim()) return
     setLoading(true)
     setError('')
+    const slug = orgInput.trim().toLowerCase()
     try {
-      const org = await orgsApi.get(slug.trim().toLowerCase())
-      setOrg(org.slug, org.name)
-      setStep('creds')
+      const data = await orgsApi.get(slug)
+      setOrgSlug(slug)
+      setOrgName(data.name || slug)
+      setOrg(slug, data.name || slug)
+      setStep(2)
     } catch {
-      setError('Organization not found. Check your slug and try again.')
+      setError('Organization not found. Check the slug and try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
-    // Redirect to Spring AS form login endpoint for this tenant
-    const form = document.createElement('form')
-    form.method = 'POST'
-    form.action = `/${slug}/login`
-    const u = document.createElement('input'); u.name = 'username'; u.value = email; form.appendChild(u)
-    const p = document.createElement('input'); p.name = 'password'; p.value = password; form.appendChild(p)
-    document.body.appendChild(form)
-    form.submit()
-  }
-
-  function handleOAuthLogin(provider: string) {
-    // Initiate OAuth2 authorization_code flow via the tenant endpoint
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: provider,
-      redirect_uri: `${window.location.origin}/callback`,
-      scope: 'openid profile email',
-    })
-    window.location.href = `/${slug}/oauth2/authorize?${params}`
+    setLoading(true)
+    setError('')
+    try {
+      await fetch(`/${orgSlug}/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ username: email, password }),
+        credentials: 'include',
+        redirect: 'manual',
+      })
+      const check = await fetch(`/api/orgs/${orgSlug}/users`, {
+        credentials: 'include',
+        redirect: 'manual',
+      })
+      if (check.status === 200) {
+        setUser(email)
+        navigate('/dashboard')
+      } else {
+        setError('Invalid email or password.')
+      }
+    } catch {
+      setError('Login failed. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-      {/* Background glow */}
-      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-        <div className="w-[600px] h-[600px] rounded-full opacity-20"
-          style={{ background: 'radial-gradient(circle, #6366f1 0%, transparent 70%)', filter: 'blur(80px)' }} />
-      </div>
+    <div style={{
+      minHeight: '100vh',
+      background: '#ffffff',
+      display: 'flex',
+      fontFamily: "'Inter', system-ui, sans-serif",
+    }}>
+      {/* Left panel — branding (hidden on mobile) */}
+      <div style={{
+        width: 480,
+        flexShrink: 0,
+        background: 'linear-gradient(160deg, #09090b 0%, #18181b 100%)',
+        padding: '2.5rem',
+        display: 'flex',
+        flexDirection: 'column',
+        justifyContent: 'space-between',
+      }} className="hidden lg:flex">
+        {/* Logo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+          <div style={{
+            width: 34,
+            height: 34,
+            borderRadius: '0.5rem',
+            background: '#6366f1',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: '1rem',
+            color: '#fff',
+            flexShrink: 0,
+          }}>V</div>
+          <span style={{ color: '#fafafa', fontWeight: 600, fontSize: '0.9375rem' }}>Vault SSO</span>
+        </div>
 
-      <div className="relative z-10 w-full max-w-5xl px-6 flex items-center gap-16">
-        {/* Left — branding */}
-        <motion.div
-          initial={{ opacity: 0, x: -40 }} animate={{ opacity: 1, x: 0 }}
-          transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}
-          className="hidden lg:flex flex-col flex-1"
-        >
-          <div className="flex items-center gap-3 mb-8">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center"
-              style={{ background: 'linear-gradient(135deg, #6366f1, #4f46e5)', boxShadow: '0 0 24px rgba(99,102,241,0.5)' }}>
-              <Building2 size={20} color="white" />
-            </div>
-            <span className="text-xl font-semibold tracking-tight">Vault SSO</span>
-          </div>
-          <h1 className="text-5xl font-bold leading-tight tracking-tight mb-4"
-            style={{ background: 'linear-gradient(135deg, #fff 30%, #908fa0)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-            Your identity.<br />Every app.
-          </h1>
-          <p className="text-base leading-relaxed max-w-xs" style={{ color: '#908fa0' }}>
-            One SSO server for all your organization's apps. Secure, fast, and yours.
+        {/* Hero */}
+        <div>
+          <p style={{
+            fontSize: '0.7rem',
+            fontWeight: 600,
+            color: '#6366f1',
+            textTransform: 'uppercase',
+            letterSpacing: '0.1em',
+            marginBottom: '1rem',
+          }}>Enterprise Identity Platform</p>
+          <h1 style={{
+            fontSize: '2.125rem',
+            fontWeight: 700,
+            color: '#fafafa',
+            lineHeight: 1.2,
+            marginBottom: '1rem',
+          }}>Secure access<br />for every app.</h1>
+          <p style={{ color: '#71717a', fontSize: '0.9rem', lineHeight: 1.65, maxWidth: 300 }}>
+            OAuth2 &amp; OIDC compliant single sign-on. One identity layer for all your services.
           </p>
-          <div className="mt-10 flex flex-col gap-3">
-            {['Zero config OAuth2 & OIDC', 'Multi-tenant by default', 'Roles & permissions built-in'].map((f, i) => (
-              <motion.div key={f} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.3 + i * 0.1 }}
-                className="flex items-center gap-3 text-sm" style={{ color: '#c7c4d7' }}>
-                <div className="w-1.5 h-1.5 rounded-full" style={{ background: '#6366f1' }} />
-                {f}
-              </motion.div>
+          <div style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.875rem' }}>
+            {[
+              { dot: '#6366f1', text: 'OAuth2 / OIDC compliant' },
+              { dot: '#22c55e', text: 'Multi-tenant by design' },
+              { dot: '#f59e0b', text: 'RBAC roles & permissions' },
+            ].map(item => (
+              <div key={item.text} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <span style={{
+                  width: 6, height: 6,
+                  borderRadius: '50%',
+                  background: item.dot,
+                  flexShrink: 0,
+                }} />
+                <span style={{ color: '#a1a1aa', fontSize: '0.85rem' }}>{item.text}</span>
+              </div>
             ))}
           </div>
-        </motion.div>
+        </div>
 
-        {/* Right — login card */}
-        <motion.div
-          initial={{ opacity: 0, y: 30 }} animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-          className="glass glow-indigo w-full max-w-md rounded-2xl p-8"
-        >
+        <p style={{ color: '#3f3f46', fontSize: '0.75rem' }}>© 2026 Vault SSO</p>
+      </div>
+
+      {/* Right panel — form */}
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem 1.5rem',
+      }}>
+        <div style={{ width: '100%', maxWidth: 380 }}>
+          {/* Mobile logo */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '0.625rem',
+            marginBottom: '2rem',
+            justifyContent: 'center',
+          }} className="lg:hidden">
+            <div style={{
+              width: 32, height: 32, borderRadius: '0.5rem',
+              background: '#6366f1', display: 'flex', alignItems: 'center',
+              justifyContent: 'center', fontWeight: 700, color: '#fff', fontSize: '0.9rem',
+            }}>V</div>
+            <span style={{ color: '#18181b', fontWeight: 600, fontSize: '0.9375rem' }}>Vault SSO</span>
+          </div>
+
           <AnimatePresence mode="wait">
-            {step === 'org' ? (
-              <motion.div key="org"
-                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}>
-                <h2 className="text-2xl font-semibold mb-1 tracking-tight">Find your org</h2>
-                <p className="text-sm mb-6" style={{ color: '#908fa0' }}>Enter your organization's slug to continue</p>
+            {step === 1 ? (
+              <motion.div key="step1" variants={slide} initial="hidden" animate="visible" exit="exit">
+                <div style={{ marginBottom: '1.75rem' }}>
+                  <h2 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#18181b', marginBottom: '0.4rem' }}>
+                    Sign in to your org
+                  </h2>
+                  <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
+                    Enter your organization slug to continue.
+                  </p>
+                </div>
 
-                <form onSubmit={handleOrgSubmit} className="flex flex-col gap-4">
-                  <div className="relative">
-                    <Building2 size={16} className="absolute left-4 top-1/2 -translate-y-1/2" style={{ color: '#908fa0' }} />
-                    <input className="input-pill pl-10" placeholder="acme-corp" value={slug}
-                      onChange={e => setSlug(e.target.value)} autoFocus />
+                <form onSubmit={handleOrgLookup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Organization slug</label>
+                    <div style={{ position: 'relative' }}>
+                      <Building2 size={14} style={{
+                        position: 'absolute', left: '0.75rem', top: '50%',
+                        transform: 'translateY(-50%)', color: '#a1a1aa',
+                      }} />
+                      <input
+                        className="input-light"
+                        style={{ paddingLeft: '2.25rem' }}
+                        type="text"
+                        placeholder="acme-corp"
+                        value={orgInput}
+                        onChange={e => { setOrgInput(e.target.value); setError('') }}
+                        autoFocus
+                        required
+                      />
+                    </div>
+                    <p style={{ marginTop: '0.375rem', fontSize: '0.75rem', color: '#a1a1aa' }}>
+                      e.g.{' '}
+                      <code style={{
+                        fontFamily: 'monospace', background: '#f4f4f5',
+                        padding: '0.1rem 0.35rem', borderRadius: '0.25rem', color: '#52525b',
+                      }}>acme-corp</code>
+                    </p>
                   </div>
 
-                  {error && (
-                    <motion.p initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }}
-                      className="text-sm px-4" style={{ color: '#ffb4ab' }}>{error}</motion.p>
-                  )}
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.625rem 0.875rem',
+                          background: '#fef2f2', border: '1px solid #fecaca',
+                          borderRadius: '0.5rem', color: '#dc2626', fontSize: '0.8125rem',
+                        }}>
+                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                        {error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
 
-                  <button className="btn-primary flex items-center justify-center gap-2" disabled={loading}>
-                    {loading ? <Loader2 size={16} className="animate-spin" /> : <>Continue <ArrowRight size={16} /></>}
+                  <button
+                    className="btn-primary-light"
+                    type="submit"
+                    disabled={loading || !orgInput.trim()}
+                    style={{ width: '100%', padding: '0.7rem 1.25rem', justifyContent: 'center' }}
+                  >
+                    {loading
+                      ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                      : <><span>Continue</span> <ArrowRight size={15} /></>}
                   </button>
                 </form>
 
-                <div className="mt-6 text-center text-sm" style={{ color: '#908fa0' }}>
-                  No organization?{' '}
-                  <button onClick={() => navigate('/signup')}
-                    className="font-medium transition-colors" style={{ color: '#c0c1ff' }}
-                    onMouseEnter={e => (e.currentTarget.style.color = '#6366f1')}
-                    onMouseLeave={e => (e.currentTarget.style.color = '#c0c1ff')}>
-                    Create one →
-                  </button>
-                </div>
+                <p style={{ marginTop: '1.5rem', textAlign: 'center', fontSize: '0.8125rem', color: '#71717a' }}>
+                  Don't have an account?{' '}
+                  <Link to="/signup" style={{ color: '#6366f1', fontWeight: 500, textDecoration: 'none' }}>
+                    Create organization
+                  </Link>
+                </p>
               </motion.div>
             ) : (
-              <motion.div key="creds"
-                initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
-                transition={{ duration: 0.3 }}>
-                <button onClick={() => { setStep('org'); setError('') }}
-                  className="flex items-center gap-2 text-sm mb-6 transition-colors"
-                  style={{ color: '#908fa0' }}>
-                  ← <span className="px-2 py-0.5 rounded-full text-xs font-medium"
-                    style={{ background: 'rgba(99,102,241,0.15)', color: '#c0c1ff' }}>{slug}</span>
-                </button>
+              <motion.div key="step2" variants={slide} initial="hidden" animate="visible" exit="exit">
+                {/* Org chip */}
+                <div style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
+                  padding: '0.3rem 0.75rem',
+                  background: '#f4f4f5', borderRadius: '9999px',
+                  marginBottom: '1.25rem', fontSize: '0.8rem', color: '#3f3f46', fontWeight: 500,
+                }}>
+                  <ShieldCheck size={13} style={{ color: '#22c55e' }} />
+                  {orgName || orgInput}
+                  <button
+                    onClick={() => { setStep(1); setError('') }}
+                    style={{
+                      background: 'none', border: 'none', cursor: 'pointer',
+                      color: '#a1a1aa', fontSize: '0.7rem', padding: 0, marginLeft: '0.125rem',
+                    }}
+                  >✕</button>
+                </div>
 
-                <h2 className="text-2xl font-semibold mb-1 tracking-tight">Welcome back</h2>
-                <p className="text-sm mb-6" style={{ color: '#908fa0' }}>Sign in to continue to {slug}</p>
+                <div style={{ marginBottom: '1.75rem' }}>
+                  <h2 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#18181b', marginBottom: '0.4rem' }}>
+                    Welcome back
+                  </h2>
+                  <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
+                    Sign in with your admin credentials.
+                  </p>
+                </div>
 
-                <form onSubmit={handleLogin} className="flex flex-col gap-4">
-                  <input className="input-pill" type="email" placeholder="Email address"
-                    value={email} onChange={e => setEmail(e.target.value)} autoFocus />
-
-                  <div className="relative">
-                    <input className="input-pill pr-12" type={showPass ? 'text' : 'password'}
-                      placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} />
-                    <button type="button" onClick={() => setShowPass(!showPass)}
-                      className="absolute right-4 top-1/2 -translate-y-1/2 transition-opacity hover:opacity-70"
-                      style={{ color: '#908fa0' }}>
-                      {showPass ? <EyeOff size={16} /> : <Eye size={16} />}
-                    </button>
+                <form onSubmit={handleLogin} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Email address</label>
+                    <input
+                      className="input-light"
+                      type="email"
+                      placeholder="admin@company.com"
+                      value={email}
+                      onChange={e => { setEmail(e.target.value); setError('') }}
+                      autoFocus
+                      required
+                    />
                   </div>
 
-                  <div className="flex justify-end">
-                    <button type="button" className="text-sm transition-colors"
-                      style={{ color: '#c0c1ff' }}>Forgot password?</button>
+                  <div>
+                    <label style={{
+                      display: 'block', fontSize: '0.8125rem', fontWeight: 500,
+                      color: '#3f3f46', marginBottom: '0.4rem',
+                    }}>Password</label>
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        className="input-light"
+                        type={showPass ? 'text' : 'password'}
+                        placeholder="••••••••"
+                        value={password}
+                        onChange={e => { setPassword(e.target.value); setError('') }}
+                        required
+                        style={{ paddingRight: '2.75rem' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPass(p => !p)}
+                        style={{
+                          position: 'absolute', right: '0.75rem', top: '50%',
+                          transform: 'translateY(-50%)', background: 'none',
+                          border: 'none', cursor: 'pointer', color: '#a1a1aa', padding: 0,
+                        }}
+                      >
+                        {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
+                      </button>
+                    </div>
                   </div>
 
-                  <button className="btn-primary flex items-center justify-center gap-2">
-                    Sign in <ArrowRight size={16} />
+                  <AnimatePresence>
+                    {error && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: '0.5rem',
+                          padding: '0.625rem 0.875rem',
+                          background: '#fef2f2', border: '1px solid #fecaca',
+                          borderRadius: '0.5rem', color: '#dc2626', fontSize: '0.8125rem',
+                        }}>
+                        <AlertCircle size={14} style={{ flexShrink: 0 }} />
+                        {error}
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+
+                  <button
+                    className="btn-primary-light"
+                    type="submit"
+                    disabled={loading || !email || !password}
+                    style={{ width: '100%', padding: '0.7rem 1.25rem', justifyContent: 'center' }}
+                  >
+                    {loading
+                      ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                      : <><span>Sign in</span> <ArrowRight size={15} /></>}
                   </button>
                 </form>
-
-                <div className="my-6 flex items-center gap-3">
-                  <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
-                  <span className="text-xs" style={{ color: '#908fa0' }}>or continue with</span>
-                  <div className="flex-1 h-px" style={{ background: 'rgba(255,255,255,0.08)' }} />
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  {[{ icon: <Globe size={16} />, label: 'Google', id: 'google' },
-                    { icon: <GitFork size={16} />, label: 'GitHub', id: 'github' }].map(p => (
-                    <button key={p.id} onClick={() => handleOAuthLogin(p.id)}
-                      className="btn-glass flex items-center justify-center gap-3 w-full">
-                      {p.icon} Continue with {p.label}
-                    </button>
-                  ))}
-                </div>
               </motion.div>
             )}
           </AnimatePresence>
-        </motion.div>
+        </div>
       </div>
     </div>
   )

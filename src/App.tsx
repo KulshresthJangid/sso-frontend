@@ -7,6 +7,7 @@ import OverviewPage from './pages/OverviewPage'
 import AppsPage from './pages/AppsPage'
 import UsersPage from './pages/UsersPage'
 import RolesPage from './pages/RolesPage'
+import GuidePage from './pages/GuidePage'
 import { useOrgStore } from './store/orgStore'
 
 function RequireOrg({ children }: { children: React.ReactNode }) {
@@ -31,18 +32,19 @@ export default function App() {
           <Route path="apps" element={<AppsPage />} />
           <Route path="users" element={<UsersPage />} />
           <Route path="roles" element={<RolesPage />} />
+          <Route path="guide" element={<GuidePage />} />
           <Route path="settings" element={
-            <div className="p-8 text-center pt-20" style={{ color: '#908fa0' }}>Settings — coming soon</div>
+            <div className="p-8 text-center pt-20" style={{ color: '#6b6b6b' }}>Settings — coming soon</div>
           } />
         </Route>
 
         {/* Catch-all */}
         <Route path="*" element={
-          <div className="min-h-screen flex items-center justify-center text-center">
+          <div className="min-h-screen flex items-center justify-center text-center" style={{ background: '#ffffff' }}>
             <div>
-              <p className="text-6xl font-bold mb-4" style={{ color: 'rgba(255,255,255,0.1)' }}>404</p>
-              <p className="text-lg font-medium mb-2">Page not found</p>
-              <a href="/login" className="text-sm" style={{ color: '#6366f1' }}>← Back to login</a>
+              <p className="text-6xl font-bold mb-4" style={{ color: '#e5e5e5' }}>404</p>
+              <p className="text-lg font-medium mb-2" style={{ color: '#0a0a0a' }}>Page not found</p>
+              <a href="/login" className="text-sm underline" style={{ color: '#6b6b6b' }}>← Back to login</a>
             </div>
           </div>
         } />

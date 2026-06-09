@@ -1,19 +1,24 @@
-import { motion } from 'framer-motion'
+import { motion, type Variants } from 'framer-motion'
 import { useEffect, useState } from 'react'
-import { AppWindow, Users, Shield, ArrowRight } from 'lucide-react'
+import { AppWindow, Users, Shield, ArrowRight, Check, Copy, ExternalLink } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { clientsApi, usersApi, rolesApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
-const stagger = {
-  container: { hidden: {}, show: { transition: { staggerChildren: 0.08 } } },
-  item: { hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { ease: [0.22, 1, 0.36, 1] } } }
+const containerVariants: Variants = {
+  hidden: {},
+  show: { transition: { staggerChildren: 0.07 } },
+}
+const itemVariants: Variants = {
+  hidden: { opacity: 0, y: 12 },
+  show: { opacity: 1, y: 0, transition: { duration: 0.3 } },
 }
 
 export default function OverviewPage() {
   const navigate = useNavigate()
   const { slug, orgName } = useOrgStore()
   const [stats, setStats] = useState({ apps: 0, users: 0, roles: 0 })
+  const [copied, setCopied] = useState('')
 
   useEffect(() => {
     if (!slug) return
@@ -22,81 +27,209 @@ export default function OverviewPage() {
       usersApi.list(slug).catch(() => []),
       rolesApi.listRoles(slug).catch(() => []),
     ]).then(([apps, users, roles]) => {
-      setStats({ apps: apps.length, users: users.length, roles: roles.length })
+      setStats({
+        apps: Array.isArray(apps) ? apps.length : 0,
+        users: Array.isArray(users) ? users.length : 0,
+        roles: Array.isArray(roles) ? roles.length : 0,
+      })
     })
   }, [slug])
 
-  const cards = [
-    { icon: <AppWindow size={20} />, label: 'Applications', value: stats.apps, color: '#6366f1', to: '/dashboard/apps' },
-    { icon: <Users size={20} />, label: 'Users', value: stats.users, color: '#22c55e', to: '/dashboard/users' },
-    { icon: <Shield size={20} />, label: 'Roles', value: stats.roles, color: '#f59e0b', to: '/dashboard/roles' },
+  function copyText(text: string, key: string) {
+    navigator.clipboard.writeText(text)
+    setCopied(key)
+    setTimeout(() => setCopied(''), 2000)
+  }
+
+  const BASE = `http://localhost:9000/${slug}`
+  const endpoints = [
+    { label: 'Authorization URL', value: `${BASE}/oauth2/authorize`, key: 'auth' },
+    { label: 'Token URL', value: `${BASE}/oauth2/token`, key: 'token' },
+    { label: 'JWKS URL', value: `http://localhost:9000/oauth2/jwks`, key: 'jwks' },
+    { label: 'Issuer', value: BASE, key: 'issuer' },
+  ]
+
+  const statCards = [
+    { icon: AppWindow, label: 'Applications', value: stats.apps, to: '/dashboard/apps', color: '#6366f1' },
+    { icon: Users, label: 'Users', value: stats.users, to: '/dashboard/users', color: '#22c55e' },
+    { icon: Shield, label: 'Roles', value: stats.roles, to: '/dashboard/roles', color: '#f59e0b' },
   ]
 
   return (
-    <div className="p-8">
+    <div style={{ padding: '1.75rem', maxWidth: 900 }}>
       {/* Header */}
-      <motion.div initial={{ opacity: 0, y: -12 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }} className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight mb-1">
-          Good morning 👋
+      <motion.div
+        initial={{ opacity: 0, y: -8 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.3 }}
+        style={{ marginBottom: '1.75rem' }}
+      >
+        <h1 style={{ fontSize: '1.375rem', fontWeight: 700, color: 'var(--text-1)', marginBottom: '0.3rem' }}>
+          Overview
         </h1>
-        <p className="text-sm" style={{ color: '#908fa0' }}>
-          Here's what's happening in <span style={{ color: '#c0c1ff' }}>{orgName || slug}</span>
+        <p style={{ fontSize: '0.875rem', color: 'var(--text-2)' }}>
+          Welcome back to{' '}
+          <span style={{ color: 'var(--text-1)', fontWeight: 500 }}>{orgName || slug}</span>
         </p>
       </motion.div>
 
       {/* Stat cards */}
-      <motion.div variants={stagger.container} initial="hidden" animate="show"
-        className="grid grid-cols-3 gap-4 mb-8">
-        {cards.map(card => (
-          <motion.button key={card.label} variants={stagger.item}
-            onClick={() => navigate(card.to)}
-            className="glass rounded-2xl p-5 text-left group transition-all hover:scale-[1.02]"
-            style={{ background: 'rgba(255,255,255,0.03)' }}>
-            <div className="flex items-center justify-between mb-4">
-              <div className="w-9 h-9 rounded-xl flex items-center justify-center"
-                style={{ background: `${card.color}20`, color: card.color }}>
-                {card.icon}
+      <motion.div
+        variants={containerVariants}
+        initial="hidden"
+        animate="show"
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '1rem', marginBottom: '1.5rem' }}
+      >
+        {statCards.map(card => {
+          const Icon = card.icon
+          return (
+            <motion.button
+              key={card.label}
+              variants={itemVariants}
+              onClick={() => navigate(card.to)}
+              className="card"
+              style={{
+                padding: '1.25rem',
+                textAlign: 'left',
+                background: 'var(--surface)',
+                cursor: 'pointer',
+                border: '1px solid var(--border)',
+                borderRadius: '0.75rem',
+                transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = 'var(--border-2)')}
+              onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--border)')}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'flex-start',
+                justifyContent: 'space-between', marginBottom: '1.25rem',
+              }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: '0.5rem',
+                  background: `${card.color}18`,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}>
+                  <Icon size={16} style={{ color: card.color }} />
+                </div>
+                <ArrowRight size={13} style={{ color: 'var(--text-3)', marginTop: '0.25rem' }} />
               </div>
-              <ArrowRight size={14} className="opacity-0 group-hover:opacity-60 transition-opacity -translate-x-1 group-hover:translate-x-0 transition-transform"
-                style={{ color: '#908fa0' }} />
-            </div>
-            <div className="text-3xl font-bold tracking-tight mb-1">{card.value}</div>
-            <div className="text-sm" style={{ color: '#908fa0' }}>{card.label}</div>
-          </motion.button>
-        ))}
+              <div style={{
+                fontSize: '2rem', fontWeight: 700,
+                color: 'var(--text-1)', lineHeight: 1, marginBottom: '0.375rem',
+              }}>{card.value}</div>
+              <div style={{ fontSize: '0.8125rem', color: 'var(--text-2)' }}>{card.label}</div>
+            </motion.button>
+          )
+        })}
       </motion.div>
 
-      {/* Quick start */}
-      <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.3, duration: 0.4 }}
-        className="glass rounded-2xl p-6" style={{ background: 'rgba(255,255,255,0.02)' }}>
-        <h2 className="text-base font-semibold mb-1">Quick start</h2>
-        <p className="text-sm mb-5" style={{ color: '#908fa0' }}>Get your SSO setup in 3 steps</p>
-        <div className="flex flex-col gap-3">
-          {[
-            { step: '1', label: 'Register your first app', done: stats.apps > 0, to: '/dashboard/apps' },
-            { step: '2', label: 'Invite your first user', done: stats.users > 0, to: '/dashboard/users' },
-            { step: '3', label: 'Create roles & permissions', done: stats.roles > 0, to: '/dashboard/roles' },
-          ].map(item => (
-            <button key={item.step} onClick={() => navigate(item.to)}
-              className="flex items-center gap-4 p-3 rounded-xl transition-all hover:bg-white/5 text-left"
-              style={{ opacity: item.done ? 0.5 : 1 }}>
-              <div className="w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0"
-                style={{
-                  background: item.done ? 'rgba(34,197,94,0.15)' : 'rgba(99,102,241,0.15)',
-                  color: item.done ? '#22c55e' : '#6366f1'
+      {/* Two column row */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+        {/* OAuth2 Endpoints */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25, duration: 0.3 }}
+          className="card"
+          style={{ padding: '1.25rem', background: 'var(--surface)' }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem' }}>
+            <ExternalLink size={14} style={{ color: 'var(--accent)' }} />
+            <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-1)' }}>
+              OAuth2 Endpoints
+            </h2>
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {endpoints.map(ep => (
+              <div key={ep.key}>
+                <p style={{ fontSize: '0.7rem', fontWeight: 500, color: 'var(--text-3)', marginBottom: '0.25rem', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                  {ep.label}
+                </p>
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: '0.5rem',
+                  background: 'var(--surface-2)', border: '1px solid var(--border)',
+                  borderRadius: '0.375rem', padding: '0.4rem 0.625rem',
                 }}>
-                {item.done ? '✓' : item.step}
+                  <code style={{
+                    flex: 1, fontSize: '0.72rem',
+                    color: 'var(--text-2)',
+                    fontFamily: "'JetBrains Mono', monospace",
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>{ep.value}</code>
+                  <button
+                    className="copy-btn"
+                    onClick={() => copyText(ep.value, ep.key)}
+                    title="Copy"
+                  >
+                    {copied === ep.key
+                      ? <Check size={12} style={{ color: 'var(--success)' }} />
+                      : <Copy size={12} />}
+                  </button>
+                </div>
               </div>
-              <span className="text-sm" style={{ textDecoration: item.done ? 'line-through' : 'none', color: item.done ? '#908fa0' : '#e4e1ed' }}>
-                {item.label}
-              </span>
-              {!item.done && <ArrowRight size={13} className="ml-auto" style={{ color: '#908fa0' }} />}
-            </button>
-          ))}
-        </div>
-      </motion.div>
+            ))}
+          </div>
+        </motion.div>
+
+        {/* Quick start checklist */}
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.3 }}
+          className="card"
+          style={{ padding: '1.25rem', background: 'var(--surface)' }}
+        >
+          <h2 style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-1)', marginBottom: '0.375rem' }}>
+            Getting started
+          </h2>
+          <p style={{ fontSize: '0.8rem', color: 'var(--text-3)', marginBottom: '1rem' }}>
+            Complete these steps to go live
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+            {[
+              { label: 'Register your first app', done: stats.apps > 0, to: '/dashboard/apps' },
+              { label: 'Invite a team member', done: stats.users > 1, to: '/dashboard/users' },
+              { label: 'Create roles & permissions', done: stats.roles > 0, to: '/dashboard/roles' },
+              { label: 'Read the integration guide', done: false, to: '/dashboard/guide' },
+            ].map((item, i) => (
+              <button
+                key={i}
+                onClick={() => navigate(item.to)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: '0.75rem',
+                  padding: '0.5rem 0.625rem',
+                  borderRadius: '0.5rem', background: 'none',
+                  border: 'none', cursor: 'pointer',
+                  textAlign: 'left', fontFamily: 'inherit',
+                  opacity: item.done ? 0.5 : 1,
+                  transition: 'background 0.15s',
+                }}
+                onMouseEnter={e => (e.currentTarget.style.background = 'var(--surface-2)')}
+                onMouseLeave={e => (e.currentTarget.style.background = 'none')}
+              >
+                <div style={{
+                  width: 20, height: 20, borderRadius: '50%', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: item.done ? 'rgba(34,197,94,0.15)' : 'var(--surface-2)',
+                  border: item.done ? '1px solid rgba(34,197,94,0.3)' : '1px solid var(--border)',
+                }}>
+                  {item.done
+                    ? <Check size={10} style={{ color: 'var(--success)' }} />
+                    : <span style={{ width: 4, height: 4, borderRadius: '50%', background: 'var(--border-2)', display: 'block' }} />}
+                </div>
+                <span style={{
+                  fontSize: '0.8125rem',
+                  color: item.done ? 'var(--text-3)' : 'var(--text-2)',
+                  textDecoration: item.done ? 'line-through' : 'none',
+                }}>{item.label}</span>
+                {!item.done && (
+                  <ArrowRight size={11} style={{ marginLeft: 'auto', color: 'var(--text-3)' }} />
+                )}
+              </button>
+            ))}
+          </div>
+        </motion.div>
+      </div>
     </div>
   )
 }

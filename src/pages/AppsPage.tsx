@@ -1,16 +1,55 @@
-import { motion, AnimatePresence } from 'framer-motion'
+import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Copy, Check, X, Loader2 } from 'lucide-react'
+import { Plus, Trash2, Copy, Check, X, Loader2, AppWindow, AlertTriangle } from 'lucide-react'
 import { clientsApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
 interface Client {
-  id: string; clientId: string; clientSecret?: string | null
-  clientName: string; redirectUris: string[]; scopes: string[]; grantTypes: string[]
+  id: string
+  clientId: string
+  clientSecret?: string | null
+  clientName: string
+  redirectUris: string[]
+  scopes: string[]
+  grantTypes: string[]
 }
 
 const SCOPES = ['openid', 'profile', 'email']
 const GRANTS = ['authorization_code', 'refresh_token', 'client_credentials']
+
+const MODAL_BG: Variants = {
+  hidden: { opacity: 0 },
+  visible: { opacity: 1, transition: { duration: 0.18 } },
+  exit: { opacity: 0, transition: { duration: 0.15 } },
+}
+const MODAL_CARD: Variants = {
+  hidden: { opacity: 0, scale: 0.96, y: 16 },
+  visible: { opacity: 1, scale: 1, y: 0, transition: { duration: 0.25 } },
+  exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.15 } },
+}
+
+function ToggleChip({
+  label, active, onClick,
+}: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      style={{
+        padding: '0.3rem 0.75rem',
+        borderRadius: '9999px',
+        fontSize: '0.78rem',
+        fontWeight: 500,
+        cursor: 'pointer',
+        fontFamily: 'inherit',
+        transition: 'all 0.15s',
+        background: active ? 'var(--accent)' : 'var(--surface-2)',
+        color: active ? '#fff' : 'var(--text-2)',
+        border: active ? '1px solid var(--accent)' : '1px solid var(--border)',
+      }}
+    >{label}</button>
+  )
+}
 
 export default function AppsPage() {
   const { slug } = useOrgStore()
@@ -19,21 +58,31 @@ export default function AppsPage() {
   const [showModal, setShowModal] = useState(false)
   const [newSecret, setNewSecret] = useState<{ clientId: string; secret: string } | null>(null)
   const [copied, setCopied] = useState('')
-
-  // Form state
-  const [form, setForm] = useState({ clientName: '', redirectUris: '', scopes: ['openid', 'profile', 'email'], grantTypes: ['authorization_code', 'refresh_token'] })
+  const [form, setForm] = useState({
+    clientName: '',
+    redirectUris: '',
+    scopes: ['openid', 'profile', 'email'],
+    grantTypes: ['authorization_code', 'refresh_token'],
+  })
   const [submitting, setSubmitting] = useState(false)
+  const [formError, setFormError] = useState('')
 
   useEffect(() => { if (slug) load() }, [slug])
 
   async function load() {
     setLoading(true)
-    try { setClients(await clientsApi.list(slug!)) } finally { setLoading(false) }
+    try {
+      const data = await clientsApi.list(slug!)
+      setClients(Array.isArray(data) ? data : [])
+    } finally {
+      setLoading(false)
+    }
   }
 
   async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     setSubmitting(true)
+    setFormError('')
     try {
       const res = await clientsApi.register(slug!, {
         clientName: form.clientName,
@@ -43,8 +92,13 @@ export default function AppsPage() {
       })
       setNewSecret({ clientId: res.clientId, secret: res.clientSecret })
       setShowModal(false)
+      setForm({ clientName: '', redirectUris: '', scopes: ['openid', 'profile', 'email'], grantTypes: ['authorization_code', 'refresh_token'] })
       await load()
-    } finally { setSubmitting(false) }
+    } catch (err: any) {
+      setFormError(err?.response?.data?.message || 'Failed to register app.')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   async function handleDelete(clientId: string) {
@@ -52,7 +106,7 @@ export default function AppsPage() {
     setClients(prev => prev.filter(c => c.clientId !== clientId))
   }
 
-  function copyToClipboard(text: string, key: string) {
+  function copy(text: string, key: string) {
     navigator.clipboard.writeText(text)
     setCopied(key)
     setTimeout(() => setCopied(''), 2000)
@@ -66,186 +120,276 @@ export default function AppsPage() {
   }
 
   return (
-    <div className="p-8">
-      <div className="flex items-center justify-between mb-6">
+    <div style={{ padding: '1.75rem' }}>
+      {/* Page header */}
+      <div style={{
+        display: 'flex', alignItems: 'flex-start',
+        justifyContent: 'space-between', marginBottom: '1.5rem',
+      }}>
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Applications</h1>
-          <p className="text-sm mt-1" style={{ color: '#908fa0' }}>OAuth2 clients registered to <span style={{ color: '#c0c1ff' }}>{slug}</span></p>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-1)', marginBottom: '0.25rem' }}>
+            Applications
+          </h1>
+          <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)' }}>
+            OAuth2 clients registered to{' '}
+            <code style={{ color: 'var(--text-1)', fontFamily: 'monospace', fontSize: '0.75rem' }}>{slug}</code>
+          </p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary w-auto px-5 flex items-center gap-2">
-          <Plus size={15} /> Register App
+        <button
+          className="btn-primary"
+          onClick={() => setShowModal(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+        >
+          <Plus size={14} /> Register App
         </button>
       </div>
 
-      {/* Secret reveal banner */}
+      {/* Secret banner */}
       <AnimatePresence>
         {newSecret && (
-          <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
-            className="rounded-2xl p-4 mb-6 flex items-start gap-3"
-            style={{ background: 'rgba(99,102,241,0.12)', border: '1px solid rgba(99,102,241,0.3)' }}>
-            <div className="flex-1">
-              <p className="text-sm font-semibold mb-1" style={{ color: '#c0c1ff' }}>⚠ Save your client secret — it won't be shown again</p>
-              <p className="text-xs font-mono break-all" style={{ color: '#e4e1ed' }}>{newSecret.secret}</p>
-              <p className="text-xs mt-1" style={{ color: '#908fa0' }}>Client ID: {newSecret.clientId}</p>
+          <motion.div
+            variants={MODAL_BG}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: '0.875rem',
+              padding: '1rem 1.125rem',
+              background: 'rgba(245,158,11,0.08)',
+              border: '1px solid rgba(245,158,11,0.25)',
+              borderRadius: '0.75rem',
+              marginBottom: '1.25rem',
+            }}
+          >
+            <AlertTriangle size={16} style={{ color: '#f59e0b', flexShrink: 0, marginTop: '0.1rem' }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#fbbf24', marginBottom: '0.25rem' }}>
+                Save your client secret — it will never be shown again
+              </p>
+              <code style={{
+                fontSize: '0.75rem', color: 'var(--text-2)',
+                fontFamily: "'JetBrains Mono', monospace",
+                wordBreak: 'break-all', display: 'block', marginBottom: '0.25rem',
+              }}>{newSecret.secret}</code>
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>
+                Client ID: {newSecret.clientId}
+              </p>
             </div>
-            <button onClick={() => copyToClipboard(newSecret.secret, 'secret')}
-              className="p-2 rounded-lg transition-colors hover:bg-white/10" style={{ color: '#908fa0' }}>
-              {copied === 'secret' ? <Check size={14} style={{ color: '#22c55e' }} /> : <Copy size={14} />}
+            <button className="copy-btn" onClick={() => copy(newSecret.secret, 'secret')} title="Copy secret">
+              {copied === 'secret' ? <Check size={14} style={{ color: 'var(--success)' }} /> : <Copy size={14} />}
             </button>
-            <button onClick={() => setNewSecret(null)} className="p-2 rounded-lg hover:bg-white/10" style={{ color: '#908fa0' }}>
+            <button className="copy-btn" onClick={() => setNewSecret(null)} title="Dismiss">
               <X size={14} />
             </button>
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* Table */}
-      <div className="glass rounded-2xl overflow-hidden" style={{ background: 'rgba(255,255,255,0.02)' }}>
+      {/* Table card */}
+      <div className="card" style={{ overflow: 'hidden', background: 'var(--surface)' }}>
         {loading ? (
-          <div className="flex items-center justify-center py-16">
-            <Loader2 size={24} className="animate-spin" style={{ color: '#6366f1' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '4rem 2rem' }}>
+            <Loader2 size={20} style={{ color: 'var(--text-3)', animation: 'spin 1s linear infinite' }} />
           </div>
         ) : clients.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-4xl mb-3">📦</p>
-            <p className="font-medium mb-1">No apps yet</p>
-            <p className="text-sm mb-4" style={{ color: '#908fa0' }}>Register your first OAuth2 app to get started</p>
-            <button onClick={() => setShowModal(true)} className="btn-primary w-auto px-5 flex items-center gap-2 mx-auto">
-              <Plus size={15} /> Register App
+          <div className="empty-state">
+            <AppWindow size={32} />
+            <p style={{ fontWeight: 500, color: 'var(--text-2)', fontSize: '0.9rem' }}>No apps registered yet</p>
+            <p style={{ fontSize: '0.8125rem' }}>Register your first OAuth2 application to get started.</p>
+            <button
+              className="btn-secondary"
+              onClick={() => setShowModal(true)}
+              style={{ marginTop: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+            >
+              <Plus size={14} /> Register App
             </button>
           </div>
         ) : (
-          <table className="w-full">
-            <thead>
-              <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-                {['App Name', 'Client ID', 'Grant Types', 'Scopes', ''].map(h => (
-                  <th key={h} className="text-left px-5 py-3 text-xs font-medium uppercase tracking-wider"
-                    style={{ color: '#908fa0' }}>{h}</th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c, i) => (
-                <motion.tr key={c.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.05 }}
-                  className="group transition-colors"
-                  style={{ borderBottom: '1px solid rgba(255,255,255,0.04)' }}
-                  onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-                  onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
-                  <td className="px-5 py-4 font-medium text-sm">{c.clientName}</td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs px-2 py-1 rounded-lg font-mono truncate max-w-[120px]"
-                        style={{ background: 'rgba(255,255,255,0.06)', color: '#c7c4d7' }}>
-                        {c.clientId.slice(0, 12)}...
-                      </code>
-                      <button onClick={() => copyToClipboard(c.clientId, c.id)}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1 rounded hover:bg-white/10"
-                        style={{ color: '#908fa0' }}>
-                        {copied === c.id ? <Check size={12} style={{ color: '#22c55e' }} /> : <Copy size={12} />}
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {c.grantTypes.map(g => (
-                        <span key={g} className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: 'rgba(99,102,241,0.15)', color: '#c0c1ff' }}>
-                          {g.replace('_', ' ')}
+          <div className="table-wrapper">
+            <table>
+              <thead>
+                <tr>
+                  <th>App Name</th>
+                  <th>Client ID</th>
+                  <th>Grant Types</th>
+                  <th>Scopes</th>
+                  <th style={{ width: 48 }}></th>
+                </tr>
+              </thead>
+              <tbody>
+                {clients.map((c, i) => (
+                  <motion.tr
+                    key={c.id || c.clientId}
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.04 }}
+                  >
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+                        <div style={{
+                          width: 28, height: 28, borderRadius: '0.375rem',
+                          background: 'var(--surface-2)', border: '1px solid var(--border)',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          flexShrink: 0,
+                        }}>
+                          <AppWindow size={13} style={{ color: 'var(--accent)' }} />
+                        </div>
+                        <span style={{ color: 'var(--text-1)', fontWeight: 500, fontSize: '0.875rem' }}>
+                          {c.clientName}
                         </span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex flex-wrap gap-1">
-                      {c.scopes.map(s => (
-                        <span key={s} className="text-xs px-2 py-0.5 rounded-full"
-                          style={{ background: 'rgba(255,255,255,0.06)', color: '#c7c4d7' }}>{s}</span>
-                      ))}
-                    </div>
-                  </td>
-                  <td className="px-5 py-4">
-                    <button onClick={() => handleDelete(c.clientId)}
-                      className="opacity-0 group-hover:opacity-100 p-2 rounded-xl transition-all hover:bg-red-500/15"
-                      style={{ color: '#908fa0' }}>
-                      <Trash2 size={14} />
-                    </button>
-                  </td>
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <code style={{
+                          fontSize: '0.72rem', color: 'var(--text-2)',
+                          fontFamily: "'JetBrains Mono', monospace",
+                          background: 'var(--surface-2)', border: '1px solid var(--border)',
+                          padding: '0.2rem 0.5rem', borderRadius: '0.3rem',
+                          maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap', display: 'block',
+                        }}>
+                          {c.clientId.slice(0, 14)}…
+                        </code>
+                        <button className="copy-btn" onClick={() => copy(c.clientId, c.clientId)} title="Copy Client ID">
+                          {copied === c.clientId
+                            ? <Check size={12} style={{ color: 'var(--success)' }} />
+                            : <Copy size={12} />}
+                        </button>
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                        {c.grantTypes.map(g => (
+                          <span key={g} className="badge badge-indigo">
+                            {g.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.3rem' }}>
+                        {c.scopes.map(s => (
+                          <span key={s} className="badge badge-gray">{s}</span>
+                        ))}
+                      </div>
+                    </td>
+                    <td>
+                      <button
+                        className="btn-danger"
+                        onClick={() => handleDelete(c.clientId)}
+                        title="Delete app"
+                        style={{ padding: '0.375rem' }}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </motion.tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
 
       {/* Register modal */}
       <AnimatePresence>
         {showModal && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            className="fixed inset-0 flex items-center justify-center z-50 p-4"
-            style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }}
-            onClick={() => setShowModal(false)}>
-            <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }} transition={{ ease: [0.22, 1, 0.36, 1] }}
-              className="glass glow-indigo rounded-2xl p-6 w-full max-w-md"
-              onClick={e => e.stopPropagation()}>
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-lg font-semibold">Register Application</h3>
-                <button onClick={() => setShowModal(false)} className="p-1.5 rounded-lg hover:bg-white/10" style={{ color: '#908fa0' }}>
+          <motion.div
+            className="modal-overlay"
+            variants={MODAL_BG}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => setShowModal(false)}
+          >
+            <motion.div
+              variants={MODAL_CARD}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={e => e.stopPropagation()}
+              className="card"
+              style={{
+                width: '100%', maxWidth: 468,
+                padding: '1.5rem',
+                background: 'var(--surface)',
+                border: '1px solid var(--border-2)',
+              }}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', marginBottom: '1.25rem',
+              }}>
+                <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-1)' }}>Register Application</h3>
+                <button className="btn-ghost" onClick={() => setShowModal(false)} style={{ padding: '0.25rem' }}>
                   <X size={16} />
                 </button>
               </div>
 
-              <form onSubmit={handleRegister} className="flex flex-col gap-4">
+              <form onSubmit={handleRegister} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                 <div>
-                  <label className="text-xs font-medium uppercase tracking-wider mb-1.5 block" style={{ color: '#908fa0' }}>App Name</label>
-                  <input className="input-pill" placeholder="My App" value={form.clientName}
-                    onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))} required autoFocus />
+                  <p className="section-label">App Name</p>
+                  <input
+                    className="input"
+                    placeholder="My Application"
+                    value={form.clientName}
+                    onChange={e => setForm(f => ({ ...f, clientName: e.target.value }))}
+                    required
+                    autoFocus
+                  />
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium uppercase tracking-wider mb-1.5 block" style={{ color: '#908fa0' }}>Redirect URIs <span className="normal-case">(one per line)</span></label>
-                  <textarea className="input-pill rounded-xl resize-none" rows={3}
-                    placeholder="https://myapp.com/callback"
-                    style={{ borderRadius: '1rem' }}
+                  <p className="section-label">Redirect URIs <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>(one per line)</span></p>
+                  <textarea
+                    className="input"
+                    rows={3}
+                    placeholder="https://myapp.com/callback&#10;http://localhost:3000/callback"
                     value={form.redirectUris}
-                    onChange={e => setForm(f => ({ ...f, redirectUris: e.target.value }))} />
+                    onChange={e => setForm(f => ({ ...f, redirectUris: e.target.value }))}
+                    style={{ resize: 'vertical', minHeight: '4.5rem' }}
+                  />
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium uppercase tracking-wider mb-2 block" style={{ color: '#908fa0' }}>Scopes</label>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="section-label">Scopes</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {SCOPES.map(s => (
-                      <button type="button" key={s} onClick={() => toggleScope(s)}
-                        className="text-xs px-3 py-1.5 rounded-full transition-all font-medium"
-                        style={{
-                          background: form.scopes.includes(s) ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)',
-                          color: form.scopes.includes(s) ? '#c0c1ff' : '#908fa0',
-                          border: form.scopes.includes(s) ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)'
-                        }}>{s}</button>
+                      <ToggleChip key={s} label={s} active={form.scopes.includes(s)} onClick={() => toggleScope(s)} />
                     ))}
                   </div>
                 </div>
 
                 <div>
-                  <label className="text-xs font-medium uppercase tracking-wider mb-2 block" style={{ color: '#908fa0' }}>Grant Types</label>
-                  <div className="flex flex-wrap gap-2">
+                  <p className="section-label">Grant Types</p>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                     {GRANTS.map(g => (
-                      <button type="button" key={g} onClick={() => toggleGrant(g)}
-                        className="text-xs px-3 py-1.5 rounded-full transition-all font-medium"
-                        style={{
-                          background: form.grantTypes.includes(g) ? 'rgba(99,102,241,0.25)' : 'rgba(255,255,255,0.06)',
-                          color: form.grantTypes.includes(g) ? '#c0c1ff' : '#908fa0',
-                          border: form.grantTypes.includes(g) ? '1px solid rgba(99,102,241,0.4)' : '1px solid rgba(255,255,255,0.08)'
-                        }}>{g.replace(/_/g, ' ')}</button>
+                      <ToggleChip key={g} label={g.replace(/_/g, ' ')} active={form.grantTypes.includes(g)} onClick={() => toggleGrant(g)} />
                     ))}
                   </div>
                 </div>
 
-                <div className="flex gap-3 pt-2">
-                  <button type="button" onClick={() => setShowModal(false)} className="btn-glass flex-1">Cancel</button>
-                  <button type="submit" className="btn-primary flex-1 flex items-center justify-center gap-2" disabled={submitting}>
-                    {submitting ? <Loader2 size={15} className="animate-spin" /> : 'Register'}
+                {formError && (
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--error)' }}>{formError}</p>
+                )}
+
+                <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => setShowModal(false)}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >Cancel</button>
+                  <button
+                    type="submit"
+                    className="btn-primary"
+                    disabled={submitting || !form.clientName}
+                    style={{ flex: 1, justifyContent: 'center' }}
+                  >
+                    {submitting
+                      ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} />
+                      : 'Register'}
                   </button>
                 </div>
               </form>
