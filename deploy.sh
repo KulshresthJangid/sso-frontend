@@ -80,7 +80,13 @@ ok "Prerequisites OK (Node $(node --version))."
 # ── Pull latest code ──────────────────────────────────────────────────────────
 log "Pulling latest code..."
 cd "$SCRIPT_DIR"
-git pull origin main
+CURRENT_BRANCH=$(git rev-parse --abbrev-ref HEAD)
+git pull origin "$CURRENT_BRANCH"
+
+if [[ "${_SSO_FE_PULLED:-0}" != "1" ]]; then
+  export _SSO_FE_PULLED=1
+  exec "$0" "$@"
+fi
 
 # ── Install dependencies ──────────────────────────────────────────────────────
 log "Installing dependencies..."
