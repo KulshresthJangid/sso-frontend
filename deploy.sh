@@ -26,7 +26,7 @@ MODE="${1:-}"
 SERVE_DIR="/var/www/sso-frontend"
 
 # Production config — SSO backend is served at /sso-server/ via nginx
-SSO_API_URL="http://buildwithkulshresth.com/sso-server"
+SSO_API_URL="https://buildwithkulshresth.com/sso-server"
 
 RED='\033[0;31m'
 YELLOW='\033[1;33m'
