@@ -23,7 +23,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MODE="${1:-}"
-SERVE_DIR="/root/apps/sso-frontend"
+SERVE_DIR="/var/www/sso-frontend"
 
 # Production config — SSO backend is served at /sso-server/ via nginx
 SSO_API_URL="http://buildwithkulshresth.com/sso-server"
@@ -124,5 +124,5 @@ echo -e "${GREEN}${BOLD}══════════════════�
 echo -e "${GREEN}${BOLD}  SSO Frontend deploy complete${NC}  [mode: ${MODE:-rolling}]"
 echo -e "${GREEN}${BOLD}════════════════════════════════════════════════════════${NC}"
 log "  SSO Admin UI : http://buildwithkulshresth.com/sso/"
-log "  Served from  : $SERVE_DIR"
+log "  Served from  : $SERVE_DIR (nginx alias)"
 echo ""
