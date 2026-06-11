@@ -48,14 +48,15 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     try {
-      await fetch(`/${orgSlug}/login`, {
+      const base = import.meta.env.VITE_SSO_API_URL ?? ''
+      await fetch(`${base}/${orgSlug}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ username: email, password }),
         credentials: 'include',
         redirect: 'manual',
       })
-      const check = await fetch(`/api/orgs/${orgSlug}/users`, {
+      const check = await fetch(`${base}/api/orgs/${orgSlug}/users`, {
         credentials: 'include',
         redirect: 'manual',
       })
