@@ -8,11 +8,23 @@ import AppsPage from './pages/AppsPage'
 import UsersPage from './pages/UsersPage'
 import RolesPage from './pages/RolesPage'
 import GuidePage from './pages/GuidePage'
+import PlatformLoginPage from './pages/PlatformLoginPage'
+import PlatformLayout from './pages/PlatformLayout'
+import BrandsPage from './pages/BrandsPage'
 import { useOrgStore } from './store/orgStore'
+import { usePlatformStore } from './store/platformStore'
 
 function RequireOrg({ children }: { children: React.ReactNode }) {
   const { slug } = useOrgStore()
   if (!slug) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
+// Deliberately checks platformStore, not orgStore — a platform operator
+// isn't scoped to any org, so RequireOrg's slug check doesn't apply here.
+function RequirePlatformAuth({ children }: { children: React.ReactNode }) {
+  const { username, password } = usePlatformStore()
+  if (!username || !password) return <Navigate to="/platform/login" replace />
   return <>{children}</>
 }
 
@@ -36,6 +48,18 @@ export default function App() {
           <Route path="settings" element={
             <div className="p-8 text-center pt-20" style={{ color: '#6b6b6b' }}>Settings — coming soon</div>
           } />
+        </Route>
+
+        {/* Platform-operator console — fully separate from /dashboard: own
+            login (fixed credentials, not tied to any org), own guard, own
+            layout. See RequirePlatformAuth above and SecurityConfig's
+            platformAdminFilterChain on the backend. */}
+        <Route path="/platform/login" element={<PlatformLoginPage />} />
+        <Route path="/platform" element={
+          <RequirePlatformAuth><PlatformLayout /></RequirePlatformAuth>
+        }>
+          <Route index element={<Navigate to="brands" replace />} />
+          <Route path="brands" element={<BrandsPage />} />
         </Route>
 
         {/* Catch-all */}

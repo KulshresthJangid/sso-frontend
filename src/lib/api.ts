@@ -1,6 +1,20 @@
 import axios from 'axios'
+import { usePlatformStore } from '../store/platformStore'
 
 const api = axios.create({ baseURL: import.meta.env.VITE_SSO_API_URL ?? '', withCredentials: true })
+
+// Separate instance for the platform-operator console — HTTP Basic instead
+// of the session cookie every other instance/page relies on (see
+// SecurityConfig.platformAdminFilterChain on the backend for why). No
+// withCredentials needed since there's no session to send.
+const platformApi = axios.create({ baseURL: import.meta.env.VITE_SSO_API_URL ?? '' })
+platformApi.interceptors.request.use(config => {
+  const { username, password } = usePlatformStore.getState()
+  if (username && password) {
+    config.headers.Authorization = 'Basic ' + btoa(`${username}:${password}`)
+  }
+  return config
+})
 
 // ── Signup (public — creates org + admin atomically) ─────────────────────────
 export const signupApi = {
@@ -70,4 +84,34 @@ export const rolesApi = {
 
   listUserRoles: (slug: string, userId: string) =>
     api.get(`/api/orgs/${slug}/users/${userId}/roles`).then(r => r.data),
+}
+
+// ── Brands (platform-operator console) ─────────────────────────────────────
+export interface CreateBrandRequest {
+  name: string
+  slug: string
+  logoUrl?: string
+  primaryColor?: string
+  secondaryColor?: string
+}
+
+export const brandsApi = {
+  // `credentials`, when passed, sends a one-off explicit Basic auth header
+  // instead of relying on platformApi's interceptor (which reads from
+  // platformStore) — used by PlatformLoginPage to verify a credential pair
+  // *before* committing it to the store.
+  list: (credentials?: { username: string; password: string }) =>
+    platformApi.get('/api/brands', credentials
+      ? { headers: { Authorization: 'Basic ' + btoa(`${credentials.username}:${credentials.password}`) } }
+      : undefined
+    ).then(r => r.data),
+
+  create: (data: CreateBrandRequest) =>
+    platformApi.post('/api/brands', data).then(r => r.data),
+
+  get: (slug: string) =>
+    platformApi.get(`/api/brands/${slug}`).then(r => r.data),
+
+  delete: (slug: string) =>
+    platformApi.delete(`/api/brands/${slug}`),
 }
