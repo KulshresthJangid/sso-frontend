@@ -28,6 +28,16 @@ const EMPTY_FORM: CreateBrandRequest = {
   name: '', slug: '', logoUrl: '', primaryColor: '#465fff', secondaryColor: '#3641f5',
 }
 
+// Where a brand's own frontend actually lives — was hardcoded to
+// "buildwithkulshresth.com" which is wrong for local testing (and for any
+// future deployment on a different domain). VITE_APP_BASE_URL lets it be
+// pinned explicitly (e.g. in .env.production); with nothing set, it falls
+// back to wherever this console itself is being served from — correct in
+// prod (sso-frontend and kaizex-frontend share the same domain, just
+// different nginx paths) and honestly "local" during local testing, rather
+// than a domain that flatly isn't where anything is running right now.
+const entryHost = import.meta.env.VITE_APP_BASE_URL ?? window.location.host
+
 // Structural clone of AppsPage — same table/modal/loading/empty-state
 // conventions, same CSS classes and framer-motion variants, applied to
 // Brand instead of OAuth2 client.
@@ -178,7 +188,7 @@ export default function BrandsPage() {
                         background: 'var(--surface-2)', border: '1px solid var(--border)',
                         padding: '0.2rem 0.5rem', borderRadius: '0.3rem',
                       }}>
-                        buildwithkulshresth.com/{b.slug}
+                        {entryHost}/{b.slug}
                       </code>
                     </td>
                     <td>
