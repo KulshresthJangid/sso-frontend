@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, useSearchParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { ArrowRight, Loader2, AlertCircle, Check, Sparkles } from 'lucide-react'
+import { ArrowRight, Loader2, AlertCircle, Check, Sparkles, Store } from 'lucide-react'
 import { orgsApi, signupApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
@@ -18,6 +18,11 @@ const slide: Variants = {
 export default function SignupPage() {
   const navigate = useNavigate()
   const { setOrg } = useOrgStore()
+  const [searchParams] = useSearchParams()
+  // ?brand=zoralis ties the new org to a reseller — see BrandsPage.tsx /
+  // CreateOrgRequest.brandSlug. Omitted entirely for a legacy/platform-direct
+  // org with no reseller (backend treats it as optional).
+  const brandSlug = searchParams.get('brand') || undefined
 
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [orgName, setOrgName] = useState('')
@@ -50,7 +55,7 @@ export default function SignupPage() {
     setLoading(true)
     setError('')
     try {
-      await signupApi.signup({ orgName, slug: orgSlug, adminEmail: email, adminPassword: password })
+      await signupApi.signup({ orgName, slug: orgSlug, adminEmail: email, adminPassword: password, brandSlug })
       setStep(3)
     } catch (err: any) {
       setError(err?.response?.data?.message || 'Could not create account. Please try again.')
@@ -90,6 +95,16 @@ export default function SignupPage() {
           }}>V</div>
           <span style={{ color: '#18181b', fontWeight: 600, fontSize: '0.9375rem' }}>Vault SSO</span>
         </div>
+
+        {brandSlug && (
+          <div style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.375rem',
+            marginBottom: '1.25rem', fontSize: '0.8rem', color: '#71717a',
+          }}>
+            <Store size={13} />
+            Signing up under <strong style={{ color: '#18181b' }}>{brandSlug}</strong>
+          </div>
+        )}
 
         {/* Step indicator */}
         <div style={{
