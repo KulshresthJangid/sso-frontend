@@ -9,6 +9,8 @@ interface Client {
   clientId: string
   clientSecret?: string | null
   clientName: string
+  orgId?: string | null
+  brandId?: string | null
   redirectUris: string[]
   scopes: string[]
   grantTypes: string[]
@@ -61,6 +63,7 @@ export default function AppsPage() {
   const [form, setForm] = useState({
     clientName: '',
     redirectUris: '',
+    permissionsUri: '',
     scopes: ['openid', 'profile', 'email'],
     grantTypes: ['authorization_code', 'refresh_token'],
   })
@@ -87,12 +90,13 @@ export default function AppsPage() {
       const res = await clientsApi.register(slug!, {
         clientName: form.clientName,
         redirectUris: form.redirectUris.split('\n').map(s => s.trim()).filter(Boolean),
+        permissionsUri: form.permissionsUri || undefined,
         scopes: form.scopes,
         grantTypes: form.grantTypes,
       })
       setNewSecret({ clientId: res.clientId, secret: res.clientSecret })
       setShowModal(false)
-      setForm({ clientName: '', redirectUris: '', scopes: ['openid', 'profile', 'email'], grantTypes: ['authorization_code', 'refresh_token'] })
+      setForm({ clientName: '', redirectUris: '', permissionsUri: '', scopes: ['openid', 'profile', 'email'], grantTypes: ['authorization_code', 'refresh_token'] })
       await load()
     } catch (err: any) {
       setFormError(err?.response?.data?.message || 'Failed to register app.')
@@ -237,6 +241,11 @@ export default function AppsPage() {
                         <span style={{ color: 'var(--text-1)', fontWeight: 500, fontSize: '0.875rem' }}>
                           {c.clientName}
                         </span>
+                        {!c.orgId && (
+                          <span className="badge badge-indigo" title="Registered once at the brand level — shared by every org under it">
+                            Brand app
+                          </span>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -275,14 +284,20 @@ export default function AppsPage() {
                       </div>
                     </td>
                     <td>
-                      <button
-                        className="btn-danger"
-                        onClick={() => handleDelete(c.clientId)}
-                        title="Delete app"
-                        style={{ padding: '0.375rem' }}
-                      >
-                        <Trash2 size={14} />
-                      </button>
+                      {c.orgId ? (
+                        <button
+                          className="btn-danger"
+                          onClick={() => handleDelete(c.clientId)}
+                          title="Delete app"
+                          style={{ padding: '0.375rem' }}
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      ) : (
+                        <span style={{ fontSize: '0.68rem', color: 'var(--text-3)' }} title="Manage this from the Brand Console instead">
+                          —
+                        </span>
+                      )}
                     </td>
                   </motion.tr>
                 ))}
@@ -350,6 +365,19 @@ export default function AppsPage() {
                     onChange={e => setForm(f => ({ ...f, redirectUris: e.target.value }))}
                     style={{ resize: 'vertical', minHeight: '4.5rem' }}
                   />
+                </div>
+
+                <div>
+                  <p className="section-label">Permissions Catalog URL <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>(optional)</span></p>
+                  <input
+                    className="input"
+                    placeholder="https://myapp.com/api/v1/permissions/catalog"
+                    value={form.permissionsUri}
+                    onChange={e => setForm(f => ({ ...f, permissionsUri: e.target.value }))}
+                  />
+                  <p style={{ marginTop: '0.375rem', fontSize: '0.72rem', color: 'var(--text-3)' }}>
+                    If this app returns its own permission list, roles here can sync from it instead of typing permissions by hand.
+                  </p>
                 </div>
 
                 <div>

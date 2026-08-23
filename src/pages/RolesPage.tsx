@@ -1,11 +1,12 @@
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Loader2, X, Shield, Lock } from 'lucide-react'
-import { rolesApi } from '../lib/api'
+import { Plus, Trash2, Loader2, X, Shield, Lock, RefreshCw, Settings2, Check } from 'lucide-react'
+import { rolesApi, clientsApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
-interface Role { id: string; name: string; description: string; clientId: string }
+interface Role { id: string; name: string; description: string; clientId: string; permissionIds: string[] }
 interface Permission { id: string; name: string; resource: string; action: string }
+interface Client { id: string; clientId: string; clientName: string; permissionsUri?: string | null }
 
 const MODAL_BG: Variants = {
   hidden: { opacity: 0 },
@@ -18,30 +19,107 @@ const MODAL_CARD: Variants = {
   exit: { opacity: 0, scale: 0.96, y: 8, transition: { duration: 0.15 } },
 }
 
+function PermissionChecklist({
+  perms, checked, onToggle,
+}: { perms: Permission[]; checked: string[]; onToggle: (id: string) => void }) {
+  if (perms.length === 0) {
+    return (
+      <p style={{ fontSize: '0.78rem', color: 'var(--text-3)', padding: '0.5rem 0' }}>
+        No permissions in this org yet — create some or sync from an app on the Permissions tab first.
+      </p>
+    )
+  }
+  return (
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: '0.25rem',
+      maxHeight: 220, overflowY: 'auto',
+      border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem',
+      background: 'var(--surface-2)',
+    }}>
+      {perms.map(p => {
+        const isChecked = checked.includes(p.id)
+        return (
+          <label
+            key={p.id}
+            style={{
+              display: 'flex', alignItems: 'center', gap: '0.625rem',
+              padding: '0.4rem 0.5rem', borderRadius: '0.375rem',
+              cursor: 'pointer', fontSize: '0.8125rem',
+              background: isChecked ? 'rgba(99,102,241,0.08)' : 'transparent',
+            }}
+          >
+            <span style={{
+              width: 16, height: 16, borderRadius: '0.25rem', flexShrink: 0,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: isChecked ? '1px solid var(--accent)' : '1px solid var(--border-2)',
+              background: isChecked ? 'var(--accent)' : 'transparent',
+            }}>
+              {isChecked && <Check size={11} style={{ color: '#fff' }} />}
+            </span>
+            <input type="checkbox" checked={isChecked} onChange={() => onToggle(p.id)} style={{ display: 'none' }} />
+            <code className="code-inline" style={{ fontSize: '0.75rem' }}>{p.name}</code>
+            <span style={{ color: 'var(--text-3)', fontSize: '0.72rem' }}>{p.resource} · {p.action}</span>
+          </label>
+        )
+      })}
+    </div>
+  )
+}
+
 export default function RolesPage() {
   const { slug } = useOrgStore()
   const [roles, setRoles] = useState<Role[]>([])
   const [perms, setPerms] = useState<Permission[]>([])
+  const [clients, setClients] = useState<Client[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'roles' | 'permissions'>('roles')
-  const [showModal, setShowModal] = useState<'role' | 'perm' | null>(null)
+  const [showModal, setShowModal] = useState<'role' | 'perm' | 'rolePerms' | null>(null)
   const [submitting, setSubmitting] = useState(false)
-  const [roleForm, setRoleForm] = useState({ name: '', description: '', clientId: '' })
+  const [roleForm, setRoleForm] = useState<{ name: string; description: string; clientId: string; permissionIds: string[] }>({ name: '', description: '', clientId: '', permissionIds: [] })
   const [permForm, setPermForm] = useState({ name: '', resource: '', action: '' })
+  const [syncClientId, setSyncClientId] = useState('')
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState('')
+  // Which role's "Edit permissions" modal is open, and the checkbox state
+  // being edited — seeded from that role's current permissionIds, diffed
+  // against on save so only the actual changes hit assign/revoke.
+  const [editingRole, setEditingRole] = useState<Role | null>(null)
+  const [editingPermIds, setEditingPermIds] = useState<string[]>([])
 
   useEffect(() => { if (slug) load() }, [slug])
 
   async function load() {
     setLoading(true)
     try {
-      const [r, p] = await Promise.all([
+      const [r, p, c] = await Promise.all([
         rolesApi.listRoles(slug!).catch(() => []),
         rolesApi.listPermissions(slug!).catch(() => []),
+        clientsApi.list(slug!).catch(() => []),
       ])
       setRoles(Array.isArray(r) ? r : [])
       setPerms(Array.isArray(p) ? p : [])
+      setClients(Array.isArray(c) ? c : [])
     } finally {
       setLoading(false)
+    }
+  }
+
+  // Apps that actually declared a permissionsUri at registration — see
+  // RegisteredClientEntity.permissionsUri / SMAT's PermissionCatalogController
+  // for the reference implementation an app implements to show up here.
+  const syncableClients = clients.filter(c => c.permissionsUri)
+
+  async function handleSync() {
+    if (!syncClientId) return
+    setSyncing(true)
+    setSyncError('')
+    try {
+      await rolesApi.syncPermissions(slug!, syncClientId)
+      await load()
+    } catch (err: any) {
+      setSyncError(err?.response?.data?.message || 'Failed to sync permissions from this app.')
+    } finally {
+      setSyncing(false)
     }
   }
 
@@ -49,9 +127,51 @@ export default function RolesPage() {
     e.preventDefault()
     setSubmitting(true)
     try {
-      await rolesApi.createRole(slug!, roleForm)
+      const created = await rolesApi.createRole(slug!, {
+        name: roleForm.name, description: roleForm.description, clientId: roleForm.clientId,
+      })
+      // Role has to exist before permissions can attach to it — assign
+      // whatever was checked in the create form as a second step.
+      await Promise.all(roleForm.permissionIds.map(pid => rolesApi.assignPermission(slug!, created.id, pid)))
       setShowModal(null)
-      setRoleForm({ name: '', description: '', clientId: '' })
+      setRoleForm({ name: '', description: '', clientId: '', permissionIds: [] })
+      await load()
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  function toggleRoleFormPerm(id: string) {
+    setRoleForm(f => ({
+      ...f,
+      permissionIds: f.permissionIds.includes(id) ? f.permissionIds.filter(x => x !== id) : [...f.permissionIds, id],
+    }))
+  }
+
+  function openEditPermissions(role: Role) {
+    setEditingRole(role)
+    setEditingPermIds(role.permissionIds)
+    setShowModal('rolePerms')
+  }
+
+  function toggleEditingPerm(id: string) {
+    setEditingPermIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
+  }
+
+  async function handleSaveRolePermissions() {
+    if (!editingRole) return
+    setSubmitting(true)
+    try {
+      const before = new Set(editingRole.permissionIds)
+      const after = new Set(editingPermIds)
+      const toAdd = editingPermIds.filter(id => !before.has(id))
+      const toRemove = editingRole.permissionIds.filter(id => !after.has(id))
+      await Promise.all([
+        ...toAdd.map(id => rolesApi.assignPermission(slug!, editingRole.id, id)),
+        ...toRemove.map(id => rolesApi.revokePermission(slug!, editingRole.id, id)),
+      ])
+      setShowModal(null)
+      setEditingRole(null)
       await load()
     } finally {
       setSubmitting(false)
@@ -129,9 +249,22 @@ export default function RolesPage() {
                   onChange={e => setRoleForm(f => ({ ...f, description: e.target.value }))} />
               </div>
               <div>
-                <p className="section-label">Client ID <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>(leave blank for org-wide)</span></p>
-                <input className="input" placeholder="550e8400-..." value={roleForm.clientId}
-                  onChange={e => setRoleForm(f => ({ ...f, clientId: e.target.value }))} />
+                <p className="section-label">App <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>(leave as org-wide unless this role is for one app)</span></p>
+                <select className="input" value={roleForm.clientId}
+                  onChange={e => setRoleForm(f => ({ ...f, clientId: e.target.value }))}>
+                  <option value="">Org-wide (no specific app)</option>
+                  {clients.map(c => (
+                    <option key={c.clientId} value={c.clientId}>{c.clientName}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <p className="section-label">Permissions <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>(optional — can also edit later)</span></p>
+                <PermissionChecklist
+                  perms={perms}
+                  checked={roleForm.permissionIds}
+                  onToggle={toggleRoleFormPerm}
+                />
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.25rem' }}>
                 <button type="button" className="btn-secondary" onClick={() => setShowModal(null)}
@@ -223,6 +356,41 @@ export default function RolesPage() {
         ))}
       </div>
 
+      {/* Sync from app — only apps that declared a permissionsUri at
+          registration show up here (see RegisteredClientEntity.permissionsUri).
+          Populates the org's own Permission rows from what the app itself
+          says it supports, instead of typing exact strings by hand. */}
+      {activeTab === 'permissions' && syncableClients.length > 0 && (
+        <div className="card" style={{
+          display: 'flex', alignItems: 'center', gap: '0.75rem',
+          padding: '0.875rem 1.125rem', marginBottom: '1.25rem',
+          background: 'var(--surface-2)', border: '1px solid var(--border)',
+        }}>
+          <RefreshCw size={15} style={{ color: 'var(--accent)', flexShrink: 0 }} />
+          <span style={{ fontSize: '0.8125rem', color: 'var(--text-2)', flexShrink: 0 }}>Sync permissions from</span>
+          <select
+            className="input"
+            value={syncClientId}
+            onChange={e => { setSyncClientId(e.target.value); setSyncError('') }}
+            style={{ maxWidth: 240 }}
+          >
+            <option value="">Choose an app…</option>
+            {syncableClients.map(c => (
+              <option key={c.clientId} value={c.clientId}>{c.clientName}</option>
+            ))}
+          </select>
+          <button
+            className="btn-secondary"
+            onClick={handleSync}
+            disabled={!syncClientId || syncing}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.375rem' }}
+          >
+            {syncing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Sync'}
+          </button>
+          {syncError && <span style={{ fontSize: '0.8rem', color: 'var(--error)' }}>{syncError}</span>}
+        </div>
+      )}
+
       {/* Content card */}
       <div className="card" style={{ overflow: 'hidden', background: 'var(--surface)' }}>
         {loading ? (
@@ -248,7 +416,8 @@ export default function RolesPage() {
                     <th>Role</th>
                     <th>Description</th>
                     <th>Scope</th>
-                    <th style={{ width: 52 }}></th>
+                    <th>Permissions</th>
+                    <th style={{ width: 84 }}></th>
                   </tr>
                 </thead>
                 <tbody>
@@ -280,14 +449,29 @@ export default function RolesPage() {
                         </span>
                       </td>
                       <td>
-                        <button
-                          className="btn-danger"
-                          onClick={() => deleteRole(r.id)}
-                          title="Delete role"
-                          style={{ padding: '0.375rem' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
+                        <span className={r.permissionIds.length > 0 ? 'badge badge-amber' : 'badge badge-gray'}>
+                          {r.permissionIds.length} {r.permissionIds.length === 1 ? 'permission' : 'permissions'}
+                        </span>
+                      </td>
+                      <td>
+                        <div style={{ display: 'flex', gap: '0.375rem' }}>
+                          <button
+                            className="btn-secondary"
+                            onClick={() => openEditPermissions(r)}
+                            title="Edit permissions"
+                            style={{ padding: '0.375rem' }}
+                          >
+                            <Settings2 size={14} />
+                          </button>
+                          <button
+                            className="btn-danger"
+                            onClick={() => deleteRole(r.id)}
+                            title="Delete role"
+                            style={{ padding: '0.375rem' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
                       </td>
                     </motion.tr>
                   ))}
@@ -354,6 +538,60 @@ export default function RolesPage() {
       <AnimatePresence>
         {showModal === 'role' && <Modal type="role" key="role-modal" />}
         {showModal === 'perm' && <Modal type="perm" key="perm-modal" />}
+        {showModal === 'rolePerms' && editingRole && (
+          <motion.div
+            key="role-perms-modal"
+            className="modal-overlay"
+            variants={MODAL_BG}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => { setShowModal(null); setEditingRole(null) }}
+          >
+            <motion.div
+              variants={MODAL_CARD}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={e => e.stopPropagation()}
+              className="card"
+              style={{
+                width: '100%', maxWidth: 420, padding: '1.5rem',
+                background: 'var(--surface)', border: '1px solid var(--border-2)',
+              }}
+            >
+              <div style={{
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'space-between', marginBottom: '1.25rem',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Settings2 size={15} style={{ color: 'var(--accent)' }} />
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-1)' }}>
+                    Permissions for {editingRole.name}
+                  </h3>
+                </div>
+                <button className="btn-ghost" onClick={() => { setShowModal(null); setEditingRole(null) }} style={{ padding: '0.25rem' }}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <PermissionChecklist
+                perms={perms}
+                checked={editingPermIds}
+                onToggle={toggleEditingPerm}
+              />
+
+              <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '1rem' }}>
+                <button type="button" className="btn-secondary" onClick={() => { setShowModal(null); setEditingRole(null) }}
+                  style={{ flex: 1, justifyContent: 'center' }}>Cancel</button>
+                <button type="button" className="btn-primary" disabled={submitting} onClick={handleSaveRolePermissions}
+                  style={{ flex: 1, justifyContent: 'center' }}>
+                  {submitting ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : 'Save'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
       </AnimatePresence>
     </div>
   )
