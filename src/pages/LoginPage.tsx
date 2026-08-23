@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
-import { ArrowRight, ShieldCheck, Loader2, AlertCircle, Building2, Eye, EyeOff } from 'lucide-react'
-import { orgsApi } from '../lib/api'
+import { ArrowRight, ShieldCheck, Loader2, AlertCircle, Store, Eye, EyeOff } from 'lucide-react'
+import { publicBrandApi, sessionApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
+import { useBrandConsoleStore } from '../store/brandConsoleStore'
 
 const slide: Variants = {
   hidden: { opacity: 0, x: 16 },
@@ -11,33 +12,42 @@ const slide: Variants = {
   exit: { opacity: 0, x: -12, transition: { duration: 0.15 } },
 }
 
+// The tenant prefix in every login URL (/{slug}/login) is always the
+// BRAND slug — TenantResolutionFilter only ever resolves brands from it,
+// never an individual org. This used to ask for "organization slug" and
+// log in against /{orgSlug}/login, which only ever worked by coincidence
+// (or not at all — see the fix). Org resolution happens automatically,
+// server-side, by searching the brand's orgs for a matching email — the
+// user never needs to know or type their own org's slug. One flow now
+// serves both an ORG_ADMIN and a brand-level SUPER_ADMIN identically;
+// which one they are is only known after login (see sessionApi.me).
 export default function LoginPage() {
   const navigate = useNavigate()
   const { setOrg, setUser } = useOrgStore()
+  const { setSession } = useBrandConsoleStore()
 
   const [step, setStep] = useState<1 | 2>(1)
-  const [orgInput, setOrgInput] = useState('')
-  const [orgName, setOrgName] = useState('')
-  const [orgSlug, setOrgSlug] = useState('')
+  const [brandInput, setBrandInput] = useState('')
+  const [brandSlug, setBrandSlug] = useState('')
+  const [brandName, setBrandName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPass, setShowPass] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleOrgLookup(e: React.FormEvent) {
+  async function handleBrandLookup(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    const slug = orgInput.trim().toLowerCase()
+    const slug = brandInput.trim().toLowerCase()
     try {
-      const data = await orgsApi.get(slug)
-      setOrgSlug(slug)
-      setOrgName(data.name || slug)
-      setOrg(slug, data.name || slug)
+      const data = await publicBrandApi.getConfig(slug)
+      setBrandSlug(slug)
+      setBrandName(data.name || slug)
       setStep(2)
     } catch {
-      setError('Organization not found. Check the slug and try again.')
+      setError('Brand not found. Check the slug and try again.')
     } finally {
       setLoading(false)
     }
@@ -49,25 +59,28 @@ export default function LoginPage() {
     setError('')
     try {
       const base = import.meta.env.VITE_SSO_API_URL ?? ''
-      await fetch(`${base}/${orgSlug}/login`, {
+      await fetch(`${base}/${brandSlug}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ username: email, password }),
         credentials: 'include',
         redirect: 'manual',
       })
-      const check = await fetch(`${base}/api/orgs/${orgSlug}/users`, {
-        credentials: 'include',
-        redirect: 'manual',
-      })
-      if (check.status === 200) {
-        setUser(email)
+
+      const session = await sessionApi.me(brandSlug)
+      setUser(session.email)
+
+      if (session.orgRole === 'SUPER_ADMIN') {
+        setSession(session.brandSlug, session.brandName, session.email)
+        navigate('/brand-console')
+      } else if (session.orgSlug) {
+        setOrg(session.orgSlug, session.orgName || session.orgSlug)
         navigate('/dashboard')
       } else {
-        setError('Invalid email or password.')
+        setError('Signed in, but this account has no organization or brand role.')
       }
     } catch {
-      setError('Login failed. Please try again.')
+      setError('Invalid email or password.')
     } finally {
       setLoading(false)
     }
@@ -180,21 +193,21 @@ export default function LoginPage() {
               <motion.div key="step1" variants={slide} initial="hidden" animate="visible" exit="exit">
                 <div style={{ marginBottom: '1.75rem' }}>
                   <h2 style={{ fontSize: '1.375rem', fontWeight: 700, color: '#18181b', marginBottom: '0.4rem' }}>
-                    Sign in to your org
+                    Sign in
                   </h2>
                   <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
-                    Enter your organization slug to continue.
+                    Enter your brand's slug to continue.
                   </p>
                 </div>
 
-                <form onSubmit={handleOrgLookup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <form onSubmit={handleBrandLookup} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div>
                     <label style={{
                       display: 'block', fontSize: '0.8125rem', fontWeight: 500,
                       color: '#3f3f46', marginBottom: '0.4rem',
-                    }}>Organization slug</label>
+                    }}>Brand slug</label>
                     <div style={{ position: 'relative' }}>
-                      <Building2 size={14} style={{
+                      <Store size={14} style={{
                         position: 'absolute', left: '0.75rem', top: '50%',
                         transform: 'translateY(-50%)', color: '#a1a1aa',
                       }} />
@@ -202,19 +215,19 @@ export default function LoginPage() {
                         className="input-light"
                         style={{ paddingLeft: '2.25rem' }}
                         type="text"
-                        placeholder="acme-corp"
-                        value={orgInput}
-                        onChange={e => { setOrgInput(e.target.value); setError('') }}
+                        placeholder="zoralis"
+                        value={brandInput}
+                        onChange={e => { setBrandInput(e.target.value); setError('') }}
                         autoFocus
                         required
                       />
                     </div>
                     <p style={{ marginTop: '0.375rem', fontSize: '0.75rem', color: '#a1a1aa' }}>
-                      e.g.{' '}
+                      The reseller you (or your org) belong to — e.g.{' '}
                       <code style={{
                         fontFamily: 'monospace', background: '#f4f4f5',
                         padding: '0.1rem 0.35rem', borderRadius: '0.25rem', color: '#52525b',
-                      }}>acme-corp</code>
+                      }}>zoralis</code>
                     </p>
                   </div>
 
@@ -239,7 +252,7 @@ export default function LoginPage() {
                   <button
                     className="btn-primary-light"
                     type="submit"
-                    disabled={loading || !orgInput.trim()}
+                    disabled={loading || !brandInput.trim()}
                     style={{ width: '100%', padding: '0.7rem 1.25rem', justifyContent: 'center' }}
                   >
                     {loading
@@ -257,7 +270,7 @@ export default function LoginPage() {
               </motion.div>
             ) : (
               <motion.div key="step2" variants={slide} initial="hidden" animate="visible" exit="exit">
-                {/* Org chip */}
+                {/* Brand chip */}
                 <div style={{
                   display: 'inline-flex', alignItems: 'center', gap: '0.5rem',
                   padding: '0.3rem 0.75rem',
@@ -265,7 +278,7 @@ export default function LoginPage() {
                   marginBottom: '1.25rem', fontSize: '0.8rem', color: '#3f3f46', fontWeight: 500,
                 }}>
                   <ShieldCheck size={13} style={{ color: '#22c55e' }} />
-                  {orgName || orgInput}
+                  {brandName || brandInput}
                   <button
                     onClick={() => { setStep(1); setError('') }}
                     style={{
@@ -280,7 +293,7 @@ export default function LoginPage() {
                     Welcome back
                   </h2>
                   <p style={{ color: '#71717a', fontSize: '0.875rem' }}>
-                    Sign in with your admin credentials.
+                    Sign in with your account credentials.
                   </p>
                 </div>
 

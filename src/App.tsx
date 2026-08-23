@@ -11,8 +11,12 @@ import GuidePage from './pages/GuidePage'
 import PlatformLoginPage from './pages/PlatformLoginPage'
 import PlatformLayout from './pages/PlatformLayout'
 import BrandsPage from './pages/BrandsPage'
+import BrandConsoleLayout from './pages/BrandConsoleLayout'
+import BrandConsoleOrganizationsPage from './pages/BrandConsoleOrganizationsPage'
+import BrandConsoleClientsPage from './pages/BrandConsoleClientsPage'
 import { useOrgStore } from './store/orgStore'
 import { usePlatformStore } from './store/platformStore'
+import { useBrandConsoleStore } from './store/brandConsoleStore'
 
 function RequireOrg({ children }: { children: React.ReactNode }) {
   const { slug } = useOrgStore()
@@ -25,6 +29,14 @@ function RequireOrg({ children }: { children: React.ReactNode }) {
 function RequirePlatformAuth({ children }: { children: React.ReactNode }) {
   const { username, password } = usePlatformStore()
   if (!username || !password) return <Navigate to="/platform/login" replace />
+  return <>{children}</>
+}
+
+// A brand's own SUPER_ADMIN — logged in through the normal /login flow
+// (not fixed platform creds), see LoginPage's session.orgRole branch.
+function RequireBrandConsole({ children }: { children: React.ReactNode }) {
+  const { brandSlug } = useBrandConsoleStore()
+  if (!brandSlug) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
@@ -60,6 +72,18 @@ export default function App() {
         }>
           <Route index element={<Navigate to="brands" replace />} />
           <Route path="brands" element={<BrandsPage />} />
+        </Route>
+
+        {/* Brand Console — a brand's own SUPER_ADMIN, self-service org/client
+            management scoped to their one brand. Logged in the same way an
+            org-admin is (see LoginPage), routed here instead of /dashboard
+            based on the post-login session's orgRole. */}
+        <Route path="/brand-console" element={
+          <RequireBrandConsole><BrandConsoleLayout /></RequireBrandConsole>
+        }>
+          <Route index element={<Navigate to="organizations" replace />} />
+          <Route path="organizations" element={<BrandConsoleOrganizationsPage />} />
+          <Route path="clients" element={<BrandConsoleClientsPage />} />
         </Route>
 
         {/* Catch-all */}

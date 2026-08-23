@@ -1,55 +1,32 @@
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import {
-  LayoutDashboard, AppWindow, Users, Shield,
-  Settings, LogOut, BookOpen, ChevronRight, ArrowLeft,
-} from 'lucide-react'
-import { useOrgStore } from '../store/orgStore'
+import { Building2, LogOut, ChevronRight, ShieldCheck, KeyRound } from 'lucide-react'
 import { useBrandConsoleStore } from '../store/brandConsoleStore'
 
 const NAV = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Overview', end: true },
-  { to: '/dashboard/apps', icon: AppWindow, label: 'Applications', end: false },
-  { to: '/dashboard/users', icon: Users, label: 'Users', end: false },
-  { to: '/dashboard/roles', icon: Shield, label: 'Roles & Permissions', end: false },
-  { to: '/dashboard/guide', icon: BookOpen, label: 'Integration Guide', end: false },
-  { to: '/dashboard/settings', icon: Settings, label: 'Settings', end: false, disabled: true },
+  { to: '/brand-console/organizations', icon: Building2, label: 'Organizations', end: false },
+  { to: '/brand-console/clients', icon: KeyRound, label: 'Clients', end: false },
 ]
 
 const PAGE_TITLES: Record<string, string> = {
-  '/dashboard': 'Overview',
-  '/dashboard/apps': 'Applications',
-  '/dashboard/users': 'Users',
-  '/dashboard/roles': 'Roles & Permissions',
-  '/dashboard/guide': 'Integration Guide',
-  '/dashboard/settings': 'Settings',
+  '/brand-console/organizations': 'Organizations',
+  '/brand-console/clients': 'Clients',
 }
 
-export default function DashboardLayout() {
+// Structural clone of PlatformLayout — same shell — but scoped to one
+// brand (reads brandConsoleStore, established via the normal /login flow's
+// SUPER_ADMIN branch) instead of every brand on the platform.
+export default function BrandConsoleLayout() {
   const navigate = useNavigate()
   const location = useLocation()
-  const { slug, orgName, userEmail, clear } = useOrgStore()
-  // Set when a brand's SUPER_ADMIN drilled in here from the Brand Console
-  // (see BrandConsoleOrganizationsPage.manageOrg) rather than logging into
-  // this org directly — brandConsoleStore's session persists independently
-  // of orgStore, so its presence is exactly "am I here on someone else's
-  // behalf right now."
-  const { brandSlug, brandName } = useBrandConsoleStore()
+  const { brandName, email, clear } = useBrandConsoleStore()
 
   function handleSignOut() {
     clear()
     navigate('/login')
   }
 
-  function handleBackToBrandConsole() {
-    // Only clear the org session — brandConsoleStore's own session stays
-    // intact so landing back on Organizations doesn't require logging in
-    // again.
-    clear()
-    navigate('/brand-console/organizations')
-  }
-
-  const pageTitle = PAGE_TITLES[location.pathname] || 'Dashboard'
+  const pageTitle = PAGE_TITLES[location.pathname] || 'Brand Console'
 
   return (
     <div style={{
@@ -84,20 +61,22 @@ export default function DashboardLayout() {
         }}>
           <div style={{
             width: 30, height: 30, borderRadius: '0.5rem',
-            background: '#6366f1',
+            background: 'var(--accent)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontWeight: 700, fontSize: '0.875rem', color: '#fff', flexShrink: 0,
-          }}>V</div>
+            flexShrink: 0,
+          }}>
+            <ShieldCheck size={14} style={{ color: '#fff' }} />
+          </div>
           <div style={{ overflow: 'hidden' }}>
             <p style={{
               fontSize: '0.875rem', fontWeight: 600,
               color: 'var(--text-1)', lineHeight: 1.2, whiteSpace: 'nowrap',
               overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>Vault SSO</p>
+            }}>Brand Console</p>
             <p style={{
               fontSize: '0.72rem', color: 'var(--text-3)',
               whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-            }}>{orgName || slug}</p>
+            }}>{brandName || 'your brand'}</p>
           </div>
         </div>
 
@@ -110,22 +89,7 @@ export default function DashboardLayout() {
           }}>Navigation</p>
           {NAV.map(item => {
             const Icon = item.icon
-            return item.disabled ? (
-              <div
-                key={item.to}
-                className="nav-item disabled"
-                title="Coming soon"
-              >
-                <Icon size={15} />
-                <span style={{ flex: 1 }}>{item.label}</span>
-                <span style={{
-                  fontSize: '0.6rem', fontWeight: 600, color: 'var(--text-3)',
-                  background: 'var(--surface-2)', padding: '0.15rem 0.4rem',
-                  borderRadius: '0.25rem', border: '1px solid var(--border)',
-                  textTransform: 'uppercase', letterSpacing: '0.05em',
-                }}>Soon</span>
-              </div>
-            ) : (
+            return (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -165,14 +129,14 @@ export default function DashboardLayout() {
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               fontSize: '0.7rem', fontWeight: 700, color: '#fff', flexShrink: 0,
             }}>
-              {(userEmail || 'A')[0].toUpperCase()}
+              {(email || 'S')[0].toUpperCase()}
             </div>
             <div style={{ overflow: 'hidden', flex: 1, minWidth: 0 }}>
               <p style={{
                 fontSize: '0.75rem', fontWeight: 500, color: 'var(--text-1)',
                 whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
-              }}>{userEmail || 'admin'}</p>
-              <p style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>Admin</p>
+              }}>{email || 'super admin'}</p>
+              <p style={{ fontSize: '0.65rem', color: 'var(--text-3)' }}>Super Admin</p>
             </div>
           </div>
           <button
@@ -202,31 +166,6 @@ export default function DashboardLayout() {
           <h1 style={{ fontSize: '0.9375rem', fontWeight: 600, color: 'var(--text-1)' }}>
             {pageTitle}
           </h1>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
-            {brandSlug && (
-              <button
-                onClick={handleBackToBrandConsole}
-                className="btn-secondary"
-                style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', fontSize: '0.75rem', padding: '0.3rem 0.75rem' }}
-                title={`Managing on behalf of ${brandName || brandSlug}`}
-              >
-                <ArrowLeft size={12} />
-                Managing for {brandName || brandSlug} — back to Brand Console
-              </button>
-            )}
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: '0.5rem',
-              padding: '0.3rem 0.75rem',
-              background: 'var(--surface-2)',
-              border: '1px solid var(--border)',
-              borderRadius: '9999px',
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e', flexShrink: 0 }} />
-              <span style={{ fontSize: '0.75rem', color: 'var(--text-2)', fontWeight: 500 }}>
-                {orgName || slug}
-              </span>
-            </div>
-          </div>
         </header>
 
         {/* Content */}
