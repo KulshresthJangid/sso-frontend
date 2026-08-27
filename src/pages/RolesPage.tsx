@@ -66,6 +66,13 @@ function PermissionChecklist({
   )
 }
 
+function describeLoadError(what: string, err: any): string {
+  const status = err?.response?.status
+  if (status === 403) return `You don't have access to ${what} for this org.`
+  if (status) return `Couldn't load ${what} (HTTP ${status}).`
+  return `Couldn't load ${what} — check your connection and try again.`
+}
+
 export default function RolesPage() {
   const { slug } = useOrgStore()
   const [roles, setRoles] = useState<Role[]>([])
@@ -85,20 +92,27 @@ export default function RolesPage() {
   // against on save so only the actual changes hit assign/revoke.
   const [editingRole, setEditingRole] = useState<Role | null>(null)
   const [editingPermIds, setEditingPermIds] = useState<string[]>([])
+  // Distinct from a genuinely-empty org: set only when a list call actually
+  // failed (e.g. a 403 from OrgAccessFilter) so that case isn't silently
+  // rendered as the same "no permissions/roles yet" empty state.
+  const [loadError, setLoadError] = useState('')
 
   useEffect(() => { if (slug) load() }, [slug])
 
   async function load() {
     setLoading(true)
+    setLoadError('')
+    const failures: string[] = []
     try {
       const [r, p, c] = await Promise.all([
-        rolesApi.listRoles(slug!).catch(() => []),
-        rolesApi.listPermissions(slug!).catch(() => []),
-        clientsApi.list(slug!).catch(() => []),
+        rolesApi.listRoles(slug!).catch((err) => { failures.push(describeLoadError('roles', err)); return [] }),
+        rolesApi.listPermissions(slug!).catch((err) => { failures.push(describeLoadError('permissions', err)); return [] }),
+        clientsApi.list(slug!).catch((err) => { failures.push(describeLoadError('apps', err)); return [] }),
       ])
       setRoles(Array.isArray(r) ? r : [])
       setPerms(Array.isArray(p) ? p : [])
       setClients(Array.isArray(c) ? c : [])
+      if (failures.length > 0) setLoadError(failures.join(' '))
     } finally {
       setLoading(false)
     }
@@ -388,6 +402,18 @@ export default function RolesPage() {
             {syncing ? <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} /> : 'Sync'}
           </button>
           {syncError && <span style={{ fontSize: '0.8rem', color: 'var(--error)' }}>{syncError}</span>}
+        </div>
+      )}
+
+      {loadError && (
+        <div className="card" style={{
+          padding: '0.75rem 1rem', marginBottom: '1rem',
+          background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)',
+          color: 'var(--error)', fontSize: '0.8125rem', display: 'flex',
+          alignItems: 'center', justifyContent: 'space-between', gap: '1rem',
+        }}>
+          <span>{loadError}</span>
+          <button className="btn-secondary" onClick={load} style={{ flexShrink: 0 }}>Retry</button>
         </div>
       )}
 
