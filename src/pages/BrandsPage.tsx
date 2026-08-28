@@ -324,7 +324,7 @@ export default function BrandsPage() {
                         background: 'var(--surface-2)', border: '1px solid var(--border)',
                         padding: '0.2rem 0.5rem', borderRadius: '0.3rem',
                       }}>
-                        {entryHost}/{b.slug}
+                        {entryHost}/kaizex/{b.slug}
                       </code>
                     </td>
                     <td>
@@ -473,7 +473,7 @@ export default function BrandsPage() {
                           />
                         </div>
                         <div>
-                          <p className="section-label">Slug <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>({entryHost}/&lt;slug&gt;)</span></p>
+                          <p className="section-label">Slug <span style={{ textTransform: 'none', fontWeight: 400, color: 'var(--text-3)' }}>({entryHost}/kaizex/&lt;slug&gt;)</span></p>
                           <input
                             className="input"
                             placeholder="zoralis"
@@ -726,7 +726,7 @@ export default function BrandsPage() {
                 <div>
                   <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-1)' }}>Edit Brand</h3>
                   <p style={{ fontSize: '0.75rem', color: 'var(--text-3)', marginTop: '0.125rem' }}>
-                    {entryHost}/{editingBrand.slug} <span style={{ opacity: 0.7 }}>(slug isn't editable)</span>
+                    {entryHost}/kaizex/{editingBrand.slug} <span style={{ opacity: 0.7 }}>(slug isn't editable)</span>
                   </p>
                 </div>
                 <button className="btn-ghost" onClick={() => setEditingBrand(null)} style={{ padding: '0.25rem' }}>
