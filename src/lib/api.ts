@@ -146,10 +146,17 @@ export const rolesApi = {
     api.delete(`/api/orgs/${slug}/roles/${roleId}/permissions/${permissionId}`),
 
   assignRoleToUser: (slug: string, userId: string, roleId: string, clientId: string) =>
-    api.post(`/api/orgs/${slug}/users/${userId}/roles/${roleId}?clientId=${clientId}`).then(r => r.data),
+    api.post(`/api/orgs/${slug}/users/${userId}/roles/${roleId}?clientId=${encodeURIComponent(clientId)}`).then(r => r.data),
 
   listUserRoles: (slug: string, userId: string) =>
-    api.get(`/api/orgs/${slug}/users/${userId}/roles`).then(r => r.data),
+    api.get(`/api/orgs/${slug}/users/${userId}/roles`).then(r => r.data as { roleId: string; roleName: string; clientId: string }[]),
+
+  // Existed on the backend (RoleController.revokeRole) since the user-role
+  // assignment endpoints were added, but was never called from here — there
+  // was no UI to assign a role to a user in the first place, so nothing
+  // needed to revoke one either. See UsersPage.tsx's role-management modal.
+  revokeRoleFromUser: (slug: string, userId: string, roleId: string, clientId: string) =>
+    api.delete(`/api/orgs/${slug}/users/${userId}/roles/${roleId}?clientId=${encodeURIComponent(clientId)}`),
 }
 
 // ── Brands (platform-operator console) ─────────────────────────────────────

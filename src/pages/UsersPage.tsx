@@ -1,7 +1,7 @@
 import { motion, AnimatePresence, type Variants } from 'framer-motion'
 import { useState, useEffect } from 'react'
-import { Plus, Trash2, Loader2, X, Users } from 'lucide-react'
-import { usersApi } from '../lib/api'
+import { Plus, Trash2, Loader2, X, Users, Shield, ShieldPlus } from 'lucide-react'
+import { usersApi, rolesApi, clientsApi } from '../lib/api'
 import { useOrgStore } from '../store/orgStore'
 
 interface User {
@@ -10,6 +10,10 @@ interface User {
   orgRole: string
   active: boolean
 }
+
+interface Role { id: string; name: string; description: string; clientId: string }
+interface Client { id: string; clientId: string; clientName: string }
+interface UserRoleAssignment { roleId: string; roleName: string; clientId: string }
 
 const MODAL_BG: Variants = {
   hidden: { opacity: 0 },
@@ -47,6 +51,20 @@ export default function UsersPage() {
   const [form, setForm] = useState({ email: '', password: '', orgRole: 'ORG_MEMBER' })
   const [error, setError] = useState('')
 
+  // Role-management modal — separate from the org-wide `roles`/`clients`
+  // lists (fetched once, lazily, on first open) and the per-user assignment
+  // list (refetched every time a different user's modal opens, since it's
+  // small and can change from other tabs/sessions).
+  const [rolesLoaded, setRolesLoaded] = useState(false)
+  const [orgRoles, setOrgRoles] = useState<Role[]>([])
+  const [orgClients, setOrgClients] = useState<Client[]>([])
+  const [rolesModalUser, setRolesModalUser] = useState<User | null>(null)
+  const [userRoles, setUserRoles] = useState<UserRoleAssignment[]>([])
+  const [userRolesLoading, setUserRolesLoading] = useState(false)
+  const [assignForm, setAssignForm] = useState({ roleId: '', clientId: '' })
+  const [assigning, setAssigning] = useState(false)
+  const [rolesError, setRolesError] = useState('')
+
   useEffect(() => { if (slug) load() }, [slug])
 
   async function load() {
@@ -79,6 +97,65 @@ export default function UsersPage() {
   async function handleDeactivate(id: string) {
     await usersApi.deactivate(slug!, id)
     setUsers(prev => prev.map(u => u.id === id ? { ...u, active: false } : u))
+  }
+
+  async function openRolesModal(user: User) {
+    setRolesModalUser(user)
+    setRolesError('')
+    setAssignForm({ roleId: '', clientId: '' })
+    if (!rolesLoaded) {
+      try {
+        const [r, c] = await Promise.all([rolesApi.listRoles(slug!), clientsApi.list(slug!)])
+        setOrgRoles(Array.isArray(r) ? r : [])
+        setOrgClients(Array.isArray(c) ? c : [])
+        setRolesLoaded(true)
+      } catch {
+        setRolesError('Failed to load roles/apps for this org.')
+      }
+    }
+    await loadUserRoles(user.id)
+  }
+
+  async function loadUserRoles(userId: string) {
+    setUserRolesLoading(true)
+    try {
+      const data = await rolesApi.listUserRoles(slug!, userId)
+      setUserRoles(Array.isArray(data) ? data : [])
+    } catch {
+      setRolesError('Failed to load this user\'s current roles.')
+    } finally {
+      setUserRolesLoading(false)
+    }
+  }
+
+  async function handleAssignRole() {
+    if (!rolesModalUser || !assignForm.roleId || !assignForm.clientId) return
+    setAssigning(true)
+    setRolesError('')
+    try {
+      await rolesApi.assignRoleToUser(slug!, rolesModalUser.id, assignForm.roleId, assignForm.clientId)
+      setAssignForm({ roleId: '', clientId: '' })
+      await loadUserRoles(rolesModalUser.id)
+    } catch (err: any) {
+      setRolesError(err?.response?.data?.message || 'Failed to assign role.')
+    } finally {
+      setAssigning(false)
+    }
+  }
+
+  async function handleRevokeRole(roleId: string, clientId: string) {
+    if (!rolesModalUser) return
+    setRolesError('')
+    try {
+      await rolesApi.revokeRoleFromUser(slug!, rolesModalUser.id, roleId, clientId)
+      setUserRoles(prev => prev.filter(ur => !(ur.roleId === roleId && ur.clientId === clientId)))
+    } catch (err: any) {
+      setRolesError(err?.response?.data?.message || 'Failed to revoke role.')
+    }
+  }
+
+  function clientName(clientId: string): string {
+    return orgClients.find(c => c.clientId === clientId)?.clientName || clientId
   }
 
   const activeCount = users.filter(u => u.active).length
@@ -135,7 +212,7 @@ export default function UsersPage() {
                   <th>User</th>
                   <th>Role</th>
                   <th>Status</th>
-                  <th style={{ width: 52 }}></th>
+                  <th style={{ width: 92 }}></th>
                 </tr>
               </thead>
               <tbody>
@@ -171,16 +248,28 @@ export default function UsersPage() {
                       </span>
                     </td>
                     <td>
-                      {u.active && u.orgRole !== 'ORG_ADMIN' && (
-                        <button
-                          className="btn-danger"
-                          onClick={() => handleDeactivate(u.id)}
-                          title="Deactivate user"
-                          style={{ padding: '0.375rem' }}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      )}
+                      <div style={{ display: 'flex', gap: '0.375rem', justifyContent: 'flex-end' }}>
+                        {u.active && (
+                          <button
+                            className="btn-secondary"
+                            onClick={() => openRolesModal(u)}
+                            title="Manage roles"
+                            style={{ padding: '0.375rem' }}
+                          >
+                            <ShieldPlus size={14} />
+                          </button>
+                        )}
+                        {u.active && u.orgRole !== 'ORG_ADMIN' && (
+                          <button
+                            className="btn-danger"
+                            onClick={() => handleDeactivate(u.id)}
+                            title="Deactivate user"
+                            style={{ padding: '0.375rem' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </motion.tr>
                 ))}
@@ -298,6 +387,127 @@ export default function UsersPage() {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Manage Roles modal — assign/revoke this user's app-scoped roles.
+          A role assignment is always tied to one app (clientId), even for
+          an org-wide role, because SSOTokenCustomizer resolves a JWT's
+          permissions[] per (workspace, user, client) — see RoleService's
+          own comment on assignRoleToUser. */}
+      <AnimatePresence>
+        {rolesModalUser && (
+          <motion.div
+            className="modal-overlay"
+            variants={MODAL_BG}
+            initial="hidden"
+            animate="visible"
+            exit="exit"
+            onClick={() => setRolesModalUser(null)}
+          >
+            <motion.div
+              variants={MODAL_CARD}
+              initial="hidden"
+              animate="visible"
+              exit="exit"
+              onClick={e => e.stopPropagation()}
+              className="card"
+              style={{ width: '100%', maxWidth: 460, padding: '1.5rem', background: 'var(--surface)', border: '1px solid var(--border-2)' }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <Shield size={15} style={{ color: 'var(--accent)' }} />
+                  <h3 style={{ fontSize: '1rem', fontWeight: 600, color: 'var(--text-1)' }}>Manage Roles</h3>
+                </div>
+                <button className="btn-ghost" onClick={() => setRolesModalUser(null)} style={{ padding: '0.25rem' }}>
+                  <X size={16} />
+                </button>
+              </div>
+              <p style={{ fontSize: '0.8125rem', color: 'var(--text-2)', marginBottom: '1.25rem' }}>{rolesModalUser.email}</p>
+
+              {/* Current assignments */}
+              <div style={{ marginBottom: '1.25rem' }}>
+                <p className="section-label">Assigned roles</p>
+                {userRolesLoading ? (
+                  <div style={{ display: 'flex', justifyContent: 'center', padding: '1.5rem 0' }}>
+                    <Loader2 size={16} style={{ color: 'var(--text-3)', animation: 'spin 1s linear infinite' }} />
+                  </div>
+                ) : userRoles.length === 0 ? (
+                  <p style={{ fontSize: '0.8125rem', color: 'var(--text-3)', padding: '0.5rem 0' }}>No roles assigned yet.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+                    {userRoles.map(ur => (
+                      <div
+                        key={`${ur.roleId}:${ur.clientId}`}
+                        style={{
+                          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                          padding: '0.5rem 0.625rem', borderRadius: '0.5rem',
+                          border: '1px solid var(--border)', background: 'var(--surface-2)',
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                          <span style={{ fontSize: '0.8125rem', fontWeight: 500, color: 'var(--text-1)' }}>{ur.roleName}</span>
+                          <span className="badge badge-gray" style={{ fontSize: '0.7rem' }}>{clientName(ur.clientId)}</span>
+                        </div>
+                        <button
+                          className="btn-ghost"
+                          onClick={() => handleRevokeRole(ur.roleId, ur.clientId)}
+                          title="Revoke role"
+                          style={{ padding: '0.25rem', flexShrink: 0 }}
+                        >
+                          <Trash2 size={13} style={{ color: 'var(--error)' }} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Assign new */}
+              <div>
+                <p className="section-label">Assign a role</p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+                  <select
+                    className="input"
+                    value={assignForm.roleId}
+                    onChange={e => setAssignForm(f => ({ ...f, roleId: e.target.value }))}
+                  >
+                    <option value="">Choose a role…</option>
+                    {orgRoles.map(r => (
+                      <option key={r.id} value={r.id}>{r.name}</option>
+                    ))}
+                  </select>
+                  <select
+                    className="input"
+                    value={assignForm.clientId}
+                    onChange={e => setAssignForm(f => ({ ...f, clientId: e.target.value }))}
+                  >
+                    <option value="">Choose an app…</option>
+                    {orgClients.map(c => (
+                      <option key={c.clientId} value={c.clientId}>{c.clientName}</option>
+                    ))}
+                  </select>
+                  {orgRoles.length === 0 && rolesLoaded && (
+                    <p style={{ fontSize: '0.78rem', color: 'var(--text-3)' }}>
+                      No roles exist in this org yet — create one on the Roles &amp; Permissions page first.
+                    </p>
+                  )}
+                  <button
+                    className="btn-primary"
+                    onClick={handleAssignRole}
+                    disabled={assigning || !assignForm.roleId || !assignForm.clientId}
+                    style={{ justifyContent: 'center' }}
+                  >
+                    {assigning ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : 'Assign'}
+                  </button>
+                </div>
+              </div>
+
+              {rolesError && (
+                <p style={{ fontSize: '0.8125rem', color: 'var(--error)', marginTop: '0.875rem' }}>{rolesError}</p>
+              )}
             </motion.div>
           </motion.div>
         )}
