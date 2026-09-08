@@ -65,6 +65,14 @@ export default function UsersPage() {
   const [assigning, setAssigning] = useState(false)
   const [rolesError, setRolesError] = useState('')
 
+  // Custom-role badges shown inline on each row — separate from orgRole
+  // (Admin/Member), which is the only thing the table showed before. Without
+  // this, assigning a role via the modal was invisible everywhere except
+  // inside that same modal — there was no way to tell, at a glance, whether
+  // "no roles assigned yet" or "assigned but not showing" was the actual
+  // state, which is exactly what got flagged.
+  const [rolesByUser, setRolesByUser] = useState<Record<string, UserRoleAssignment[]>>({})
+
   useEffect(() => { if (slug) load() }, [slug])
 
   async function load() {
@@ -73,6 +81,17 @@ export default function UsersPage() {
       const data = await usersApi.list(slug!)
       if (!Array.isArray(data)) return
       setUsers(data)
+      const entries = await Promise.all(
+        data.map(async (u: User) => {
+          try {
+            const roles = await rolesApi.listUserRoles(slug!, u.id)
+            return [u.id, Array.isArray(roles) ? roles : []] as const
+          } catch {
+            return [u.id, []] as const
+          }
+        })
+      )
+      setRolesByUser(Object.fromEntries(entries))
     } finally {
       setLoading(false)
     }
@@ -120,7 +139,12 @@ export default function UsersPage() {
     setUserRolesLoading(true)
     try {
       const data = await rolesApi.listUserRoles(slug!, userId)
-      setUserRoles(Array.isArray(data) ? data : [])
+      const list = Array.isArray(data) ? data : []
+      setUserRoles(list)
+      // Keep the table row's badges (rolesByUser) in sync too, so assigning
+      // or revoking a role in the modal shows up immediately in the list
+      // behind it, not just on next full page load.
+      setRolesByUser(prev => ({ ...prev, [userId]: list }))
     } catch {
       setRolesError('Failed to load this user\'s current roles.')
     } finally {
@@ -148,7 +172,9 @@ export default function UsersPage() {
     setRolesError('')
     try {
       await rolesApi.revokeRoleFromUser(slug!, rolesModalUser.id, roleId, clientId)
-      setUserRoles(prev => prev.filter(ur => !(ur.roleId === roleId && ur.clientId === clientId)))
+      const filtered = userRoles.filter(ur => !(ur.roleId === roleId && ur.clientId === clientId))
+      setUserRoles(filtered)
+      setRolesByUser(prev => ({ ...prev, [rolesModalUser.id]: filtered }))
     } catch (err: any) {
       setRolesError(err?.response?.data?.message || 'Failed to revoke role.')
     }
@@ -238,9 +264,26 @@ export default function UsersPage() {
                       </div>
                     </td>
                     <td>
-                      <span className={`badge ${u.orgRole === 'ORG_ADMIN' ? 'badge-indigo' : 'badge-gray'}`}>
-                        {u.orgRole === 'ORG_ADMIN' ? 'Admin' : 'Member'}
-                      </span>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem', alignItems: 'flex-start' }}>
+                        <span className={`badge ${u.orgRole === 'ORG_ADMIN' ? 'badge-indigo' : 'badge-gray'}`}>
+                          {u.orgRole === 'ORG_ADMIN' ? 'Admin' : 'Member'}
+                        </span>
+                        {/* Custom (role, app) assignments from Roles & Permissions —
+                            distinct from the coarse Admin/Member badge above. Shown
+                            explicitly even when empty so "nothing assigned yet" reads
+                            as a real state, not a missing feature. */}
+                        {rolesByUser[u.id] === undefined ? null : rolesByUser[u.id].length === 0 ? (
+                          <span style={{ fontSize: '0.72rem', color: 'var(--text-3)' }}>No roles assigned</span>
+                        ) : (
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                            {rolesByUser[u.id].map(ur => (
+                              <span key={`${ur.roleId}:${ur.clientId}`} className="badge badge-amber" style={{ fontSize: '0.7rem' }}>
+                                {ur.roleName}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td>
                       <span className={`badge ${u.active ? 'badge-green' : 'badge-red'}`}>
