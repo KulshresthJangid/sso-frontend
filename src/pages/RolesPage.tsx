@@ -20,8 +20,8 @@ const MODAL_CARD: Variants = {
 }
 
 function PermissionChecklist({
-  perms, checked, onToggle,
-}: { perms: Permission[]; checked: string[]; onToggle: (id: string) => void }) {
+  perms, checked, onToggle, onSetAll,
+}: { perms: Permission[]; checked: string[]; onToggle: (id: string) => void; onSetAll: (ids: string[]) => void }) {
   if (perms.length === 0) {
     return (
       <p style={{ fontSize: '0.78rem', color: 'var(--text-3)', padding: '0.5rem 0' }}>
@@ -29,13 +29,25 @@ function PermissionChecklist({
       </p>
     )
   }
+  const allSelected = perms.length > 0 && perms.every(p => checked.includes(p.id))
   return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', gap: '0.25rem',
-      maxHeight: 220, overflowY: 'auto',
-      border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem',
-      background: 'var(--surface-2)',
-    }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <button
+          type="button"
+          className="btn-ghost"
+          onClick={() => onSetAll(allSelected ? [] : perms.map(p => p.id))}
+          style={{ fontSize: '0.75rem', padding: '0.125rem 0.375rem' }}
+        >
+          {allSelected ? 'Deselect all' : 'Select all'}
+        </button>
+      </div>
+      <div style={{
+        display: 'flex', flexDirection: 'column', gap: '0.25rem',
+        maxHeight: 220, overflowY: 'auto',
+        border: '1px solid var(--border)', borderRadius: '0.5rem', padding: '0.5rem',
+        background: 'var(--surface-2)',
+      }}>
       {perms.map(p => {
         const isChecked = checked.includes(p.id)
         return (
@@ -62,6 +74,7 @@ function PermissionChecklist({
           </label>
         )
       })}
+      </div>
     </div>
   )
 }
@@ -278,6 +291,7 @@ export default function RolesPage() {
                   perms={perms}
                   checked={roleForm.permissionIds}
                   onToggle={toggleRoleFormPerm}
+                  onSetAll={(ids) => setRoleForm(f => ({ ...f, permissionIds: ids }))}
                 />
               </div>
               <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '0.25rem' }}>
@@ -605,6 +619,7 @@ export default function RolesPage() {
                 perms={perms}
                 checked={editingPermIds}
                 onToggle={toggleEditingPerm}
+                onSetAll={setEditingPermIds}
               />
 
               <div style={{ display: 'flex', gap: '0.75rem', paddingTop: '1rem' }}>
