@@ -15,6 +15,10 @@ interface Role { id: string; name: string; description: string; clientId: string
 interface Client { id: string; clientId: string; clientName: string }
 interface UserRoleAssignment { roleId: string; roleName: string; clientId: string }
 
+// Sentinel for the "All apps" option below - never a real clientId (those
+// come from the client registry as UUIDs), so it can't collide.
+const ALL_APPS = '__ALL__'
+
 const MODAL_BG: Variants = {
   hidden: { opacity: 0 },
   visible: { opacity: 1, transition: { duration: 0.18 } },
@@ -157,7 +161,19 @@ export default function UsersPage() {
     setAssigning(true)
     setRolesError('')
     try {
-      await rolesApi.assignRoleToUser(slug!, rolesModalUser.id, assignForm.roleId, assignForm.clientId)
+      // "All apps" fans out one assignment per registered client - a role
+      // grants nothing to an app it was never assigned against (see the
+      // Manage Roles header comment), so a "GOD role" meant to apply
+      // everywhere otherwise needs this done once per app by hand, and it's
+      // easy to miss one and end up with permissions that silently don't
+      // cover the app you actually needed them for.
+      if (assignForm.clientId === ALL_APPS) {
+        const alreadyAssigned = new Set(userRoles.filter(ur => ur.roleId === assignForm.roleId).map(ur => ur.clientId))
+        const targets = orgClients.filter(c => !alreadyAssigned.has(c.clientId))
+        await Promise.all(targets.map(c => rolesApi.assignRoleToUser(slug!, rolesModalUser.id, assignForm.roleId, c.clientId)))
+      } else {
+        await rolesApi.assignRoleToUser(slug!, rolesModalUser.id, assignForm.roleId, assignForm.clientId)
+      }
       setAssignForm({ roleId: '', clientId: '' })
       await loadUserRoles(rolesModalUser.id)
     } catch (err: any) {
@@ -439,7 +455,9 @@ export default function UsersPage() {
           A role assignment is always tied to one app (clientId), even for
           an org-wide role, because SSOTokenCustomizer resolves a JWT's
           permissions[] per (workspace, user, client) — see RoleService's
-          own comment on assignRoleToUser. */}
+          own comment on assignRoleToUser. "All apps" below fans that out
+          across every registered client in one click, for roles meant to
+          apply everywhere. */}
       <AnimatePresence>
         {rolesModalUser && (
           <motion.div
@@ -528,6 +546,7 @@ export default function UsersPage() {
                     onChange={e => setAssignForm(f => ({ ...f, clientId: e.target.value }))}
                   >
                     <option value="">Choose an app…</option>
+                    {orgClients.length > 1 && <option value={ALL_APPS}>All apps</option>}
                     {orgClients.map(c => (
                       <option key={c.clientId} value={c.clientId}>{c.clientName}</option>
                     ))}
